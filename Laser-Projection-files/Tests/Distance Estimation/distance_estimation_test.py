@@ -27,7 +27,7 @@ if _project_root not in sys.path:
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from YoloModel.YoloInterface import start_vision, stop_vision
+from Domains.Vision.interface import start_vision, stop_vision
 from Config import network_config as net_cfg
 
 # FastAPI app for receiving coordinates
@@ -96,7 +96,7 @@ async def video_stream():
         frame_count = 0
         while True:
             try:
-                from YoloModel.YoloInterface import camera as yolo_camera
+                from Domains.Vision.interface import camera as yolo_camera
                 if yolo_camera is None:
                     time.sleep(0.1)
                     continue

@@ -13,8 +13,8 @@ macro so motion is finished before 'complete' is sent).
 
 import time
 
-from Motion.Moonraker_ws_v2 import MoonrakerWSClient
-from Motion.Home import home
+from Domains.Motion.moonraker_client import MoonrakerWSClient
+from Domains.Motion.homing import home
 from Config import network_config as net_cfg
 
 

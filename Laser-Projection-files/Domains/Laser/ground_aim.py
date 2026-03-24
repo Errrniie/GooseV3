@@ -13,7 +13,7 @@ All aiming code MUST use this module. No duplicate geometry elsewhere.
 """
 
 import math
-from Laser.Calibration import (
+from Domains.Laser.calibration import (
     LASER_HEIGHT_M, 
     Y_ROTATION_DISTANCE, 
     X_ROTATION_DISTANCE, 

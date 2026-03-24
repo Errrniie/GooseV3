@@ -1,8 +1,8 @@
 
 import time
 import os
-from YoloModel.Detection import detect_human
-from YoloModel.CameraThread import CameraThread
+from Domains.Vision.detection import detect_human
+from Domains.Vision.camera import CameraThread
 import cv2
 import threading
 import queue

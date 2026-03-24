@@ -16,10 +16,10 @@ driven from a laptop GUI or curl.
 import sys
 import uvicorn
 
-from Motion.Moonraker_ws_v2 import MoonrakerWSClient
-from Motion.MotionController import MotionController
-from Motion.Home import home
-from Laser.LaserEnable import LaserController
+from Domains.Motion.moonraker_client import MoonrakerWSClient
+from Domains.Motion.controller import MotionController
+from Domains.Motion.homing import home
+from Domains.Laser.esp32 import LaserController
 import Config.motion_config as motion_cfg
 from Config import network_config as net_cfg
 from Networking import test_api

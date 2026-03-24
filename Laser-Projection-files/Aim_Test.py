@@ -20,11 +20,11 @@ import serial
 import threading
 import re
 
-from Motion.Moonraker_ws_v2 import MoonrakerWSClient
-from Motion.Home import home
-from Laser.LaserEnable import LaserController
-import Laser.GroundAim as GroundAim
-from Laser.Calibration import (
+from Domains.Motion.moonraker_client import MoonrakerWSClient
+from Domains.Motion.homing import home
+from Domains.Laser.esp32 import LaserController
+import Domains.Laser.ground_aim as GroundAim
+from Domains.Laser.calibration import (
     LASER_HEIGHT_M,
     print_calibration_summary
 )
@@ -181,7 +181,7 @@ def main():
     print("=" * 70)
     
     # Import pattern functions (lazy import to avoid circular deps)
-    from Laser.DeterrencePattern import start_square_pattern, stop_pattern
+    from Domains.Laser.patterns import start_square_pattern, stop_pattern
     
     # Main loop
     while True:

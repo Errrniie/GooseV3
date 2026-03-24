@@ -19,27 +19,27 @@ from typing import Optional, List, Tuple, Dict
 from dataclasses import dataclass
 
 # Motion subsystem
-from Motion.Moonraker_ws_v2 import MoonrakerWSClient
-from Motion.MotionController import MotionController
-from Motion.Home import home
+from Domains.Motion.moonraker_client import MoonrakerWSClient
+from Domains.Motion.controller import MotionController
+from Domains.Motion.homing import home
 
 # Laser subsystem (DO NOT MODIFY - already verified)
 from Laser import LaserEnable
-from Laser.GroundAim import get_motor_deltas_for_ground_hit
-from Laser.DeterrencePattern import start_square_pattern, stop_pattern
-from Laser.Calibration import X_NEUTRAL_MM, Y_NEUTRAL_MM, Y_MIN, Y_MAX, X_MIN, X_MAX
+from Domains.Laser.ground_aim import get_motor_deltas_for_ground_hit
+from Domains.Laser.patterns import start_square_pattern, stop_pattern
+from Domains.Laser.calibration import X_NEUTRAL_MM, Y_NEUTRAL_MM, Y_MIN, Y_MAX, X_MIN, X_MAX
 
 # Vision subsystem
-from YoloModel.CameraThread import CameraThread
-from YoloModel.Detection import detect_human
+from Domains.Vision.camera import CameraThread
+from Domains.Vision.detection import detect_human
 
 # Distance estimation
-from Distance.Model import load_model, get_distance
+from Domains.Distance.model import load_model, get_distance
 from Distance import Storage
 
 # Behavior
-from Behavior.Search_v2 import SearchController, SearchConfig
-from Behavior.TrackingController import TrackingController, TrackingConfig
+from Domains.Behavior.search import SearchController, SearchConfig
+from Domains.Behavior.tracking import TrackingController, TrackingConfig
 from Config import network_config as net_cfg
 
 

@@ -1,19 +1,15 @@
 """
-Main.py - Jetson headless runtime entry point.
-
-Runs the goose deterrence state machine (INIT → SEARCH → TRACK) with Moonraker,
-motion, search, and vision-based tracking. Control GUI is expected on the laptop
-side over the network.
+Orchestrator.py - Core state machine for the goose deterrence system.
 """
 
-from Motion.Moonraker_ws_v2 import MoonrakerWSClient
-from Motion.MotionController import MotionController
-from Motion.Home import home
-from Behavior.Search_v2 import SearchController, SearchConfig
-from Behavior.TrackingController import TrackingController, TrackingConfig
+from Domains.Motion.moonraker_client import MoonrakerWSClient
+from Domains.Motion.controller import MotionController
+from Domains.Motion.homing import home
+from Domains.Behavior.search import SearchController, SearchConfig
+from Domains.Behavior.tracking import TrackingController, TrackingConfig
 import Config.motion_config as cfg
 from Config import network_config as net_cfg
-from YoloModel.YoloInterface import start_vision, stop_vision, get_latest_detection
+from Domains.Vision.interface import start_vision, stop_vision, get_latest_detection
 
 
 # --- System states ---
@@ -87,7 +83,7 @@ def run() -> None:
                     f"[SEARCH] Target acquired! Center: {detection.bbox_center}, "
                     f"Confidence: {detection.confidence:.2f}"
                 )
-                print("[STATE] SEARCH → TRACK")
+                print("[STATE] SEARCH -> TRACK")
                 tracker.reset()
                 state = STATE_TRACK
                 continue
@@ -108,7 +104,7 @@ def run() -> None:
             # Check if target is lost - transition back to SEARCH
             if tracker.is_target_lost():
                 print("[TRACK] Target lost!")
-                print("[STATE] TRACK → SEARCH")
+                print("[STATE] TRACK -> SEARCH")
                 state = STATE_SEARCH
                 continue
 
@@ -116,7 +112,7 @@ def run() -> None:
             if track_result["should_move"]:
                 z_delta = track_result["z_delta"]
                 print(
-                    f"[TRACK] error={track_result['error_px']:.0f}px → "
+                    f"[TRACK] error={track_result['error_px']:.0f}px -> "
                     f"z_delta={z_delta:+.3f}mm"
                 )
                 motion.move_z_relative_blocking(z_delta)
@@ -132,7 +128,3 @@ def run() -> None:
             moonraker.close()
             print("Shutdown complete.")
             break
-
-
-if __name__ == "__main__":
-    run()
