@@ -2,14 +2,14 @@
 Orchestrator.py - Core state machine for the goose deterrence system.
 """
 
-from Domains.Motion.moonraker_client import MoonrakerWSClient
-from Domains.Motion.controller import MotionController
-from Domains.Motion.homing import home
-from Domains.Behavior.search import SearchController, SearchConfig
-from Domains.Behavior.tracking import TrackingController, TrackingConfig
-import Config.motion_config as cfg
-from Config import network_config as net_cfg
-from Domains.Vision.interface import start_vision, stop_vision, get_latest_detection
+from Domains.Motion.Moonraker_Client import MoonrakerWSClient
+from Domains.Motion.Controller import MotionController
+from Domains.Motion.Homing import home
+from Domains.Behavior.Search import SearchController, SearchConfig
+from Domains.Behavior.Tracking import TrackingController, TrackingConfig
+import Config.Motion_Config as cfg
+import Config.Network_Config as net_cfg
+from Domains.Vision.Interface import start_vision, stop_vision, get_latest_detection
 
 
 # --- System states ---

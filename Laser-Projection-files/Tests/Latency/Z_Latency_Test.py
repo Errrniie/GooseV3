@@ -13,9 +13,9 @@ macro so motion is finished before 'complete' is sent).
 
 import time
 
-from Domains.Motion.moonraker_client import MoonrakerWSClient
-from Domains.Motion.homing import home
-from Config import network_config as net_cfg
+from Domains.Motion.Moonraker_Client import MoonrakerWSClient
+from Domains.Motion.Homing import home
+import Config.Network_Config as net_cfg
 
 
 def run_latency_test():

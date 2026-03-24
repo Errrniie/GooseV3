@@ -19,28 +19,28 @@ from typing import Optional, List, Tuple, Dict
 from dataclasses import dataclass
 
 # Motion subsystem
-from Domains.Motion.moonraker_client import MoonrakerWSClient
-from Domains.Motion.controller import MotionController
-from Domains.Motion.homing import home
+from Domains.Motion.Moonraker_Client import MoonrakerWSClient
+from Domains.Motion.Controller import MotionController
+from Domains.Motion.Homing import home
 
 # Laser subsystem (DO NOT MODIFY - already verified)
 from Laser import LaserEnable
-from Domains.Laser.ground_aim import get_motor_deltas_for_ground_hit
-from Domains.Laser.patterns import start_square_pattern, stop_pattern
-from Domains.Laser.calibration import X_NEUTRAL_MM, Y_NEUTRAL_MM, Y_MIN, Y_MAX, X_MIN, X_MAX
+from Domains.Laser.Ground_Aim import get_motor_deltas_for_ground_hit
+from Domains.Laser.Patterns import start_square_pattern, stop_pattern
+from Domains.Laser.Calibration import X_NEUTRAL_MM, Y_NEUTRAL_MM, Y_MIN, Y_MAX, X_MIN, X_MAX
 
 # Vision subsystem
-from Domains.Vision.camera import CameraThread
-from Domains.Vision.detection import detect_human
+from Domains.Vision.Camera import CameraThread
+from Domains.Vision.Detection import detect_human
 
 # Distance estimation
-from Domains.Distance.model import load_model, get_distance
+from Domains.Distance.Model import load_model, get_distance
 from Distance import Storage
 
 # Behavior
-from Domains.Behavior.search import SearchController, SearchConfig
-from Domains.Behavior.tracking import TrackingController, TrackingConfig
-from Config import network_config as net_cfg
+from Domains.Behavior.Search import SearchController, SearchConfig
+from Domains.Behavior.Tracking import TrackingController, TrackingConfig
+import Config.Network_Config as net_cfg
 
 
 # =============================================================================

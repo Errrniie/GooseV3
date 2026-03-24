@@ -11,8 +11,8 @@ import os
 # Adjust the Python path to include the root directory of the project
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from Domains.Distance.video import VideoHandler, draw_video_controls, handle_video_key, resize_for_display
-from Domains.Distance.storage import create_calibration
+from Domains.Distance.Video import VideoHandler, draw_video_controls, handle_video_key, resize_for_display
+from Domains.Distance.Storage import create_calibration
 
 
 class VideoCalibrator:
@@ -279,7 +279,7 @@ def run_video_calibration():
 # Legacy support - keep old calibration style available
 def run_legacy_calibration():
     """Run the original live-camera calibration (kept for backward compatibility)."""
-    from Domains.Distance.storage import save_calibration_data
+    from Domains.Distance.Storage import save_calibration_data
     
     KNOWN_DISTANCES = list(range(10, 70, 5))
     calibration = []

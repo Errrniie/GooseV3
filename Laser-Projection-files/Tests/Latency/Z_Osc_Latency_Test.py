@@ -18,11 +18,11 @@ This is purely for motion/response timing experiments.
 
 import time
 
-from Domains.Motion.moonraker_client import MoonrakerWSClient
-from Domains.Motion.controller import MotionController
-from Domains.Motion.homing import home
-import Config.motion_config as motion_cfg
-from Config import network_config as net_cfg
+from Domains.Motion.Moonraker_Client import MoonrakerWSClient
+from Domains.Motion.Controller import MotionController
+from Domains.Motion.Homing import home
+import Config.Motion_Config as motion_cfg
+import Config.Network_Config as net_cfg
 
 
 def build_motion_controller(ws_client: MoonrakerWSClient) -> MotionController:

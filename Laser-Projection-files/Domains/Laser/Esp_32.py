@@ -1,6 +1,6 @@
 import requests
 from typing import Optional
-from Config import network_config as net_cfg
+import Config.Network_Config as net_cfg
 
 ESP32_IP = net_cfg.ESP32_IP
 BASE_URL = net_cfg.ESP32_BASE_URL

@@ -16,8 +16,8 @@ Later we can wire these endpoints into real motion / tracking code.
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from Config import network_config as net_cfg
-import Config.motion_config as motion_cfg
+import Config.Network_Config as net_cfg
+import Config.Motion_Config as motion_cfg
 
 app = FastAPI(title="GooseV3 Control API", version="0.2.0")
 

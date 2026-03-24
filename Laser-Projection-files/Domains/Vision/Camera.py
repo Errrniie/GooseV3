@@ -3,7 +3,7 @@ import threading
 import time
 import subprocess
 from typing import Optional
-from Config import network_config as net_cfg
+import Config.Network_Config as net_cfg
 import start_stream
 
 class CameraThread:

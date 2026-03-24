@@ -27,13 +27,13 @@ _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from Domains.Motion.moonraker_client import MoonrakerWSClient
-from Domains.Motion.homing import home
-import Config.motion_config as motion_cfg
-from Config import network_config as net_cfg
-from Domains.Vision.interface import start_vision, stop_vision, get_latest_detection
-from Domains.Behavior.tracking import TrackingController, TrackingConfig
-from Domains.Behavior.search import SearchController, SearchConfig
+from Domains.Motion.Moonraker_Client import MoonrakerWSClient
+from Domains.Motion.Homing import home
+import Config.Motion_Config as motion_cfg
+import Config.Network_Config as net_cfg
+from Domains.Vision.Interface import start_vision, stop_vision, get_latest_detection
+from Domains.Behavior.Tracking import TrackingController, TrackingConfig
+from Domains.Behavior.Search import SearchController, SearchConfig
 from Networking import test_api
 
 
@@ -83,7 +83,7 @@ def main():
     
     # Verify camera is accessible
     try:
-        from Domains.Vision.interface import camera as yolo_camera
+        from Domains.Vision.Interface import camera as yolo_camera
         if yolo_camera is not None:
             test_frame = yolo_camera.get_frame()
             if test_frame is not None:

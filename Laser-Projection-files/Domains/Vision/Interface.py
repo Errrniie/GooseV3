@@ -1,8 +1,8 @@
 
 import time
 import os
-from Domains.Vision.detection import detect_human
-from Domains.Vision.camera import CameraThread
+from Domains.Vision.Detection import detect_human
+from Domains.Vision.Camera import CameraThread
 import cv2
 import threading
 import queue

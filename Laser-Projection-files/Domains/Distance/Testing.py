@@ -11,12 +11,12 @@ import os
 # Adjust the Python path to include the root directory of the project
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from Domains.Distance.video import VideoHandler, draw_video_controls, handle_video_key, resize_for_display
-from Domains.Distance.model import load_model, get_distance
-from Domains.Distance.storage import (
+from Domains.Distance.Video import VideoHandler, draw_video_controls, handle_video_key, resize_for_display
+from Domains.Distance.Model import load_model, get_distance
+from Domains.Distance.Storage import (
     get_calibration, get_calibration_points, add_test_result, get_test_results
 )
-from Domains.Vision.detection import detect_human
+from Domains.Vision.Detection import detect_human
 
 
 class VideoTester:
@@ -499,7 +499,7 @@ def run_detection_coverage_analysis(video_path, calibration_name=None, show_over
         results = analyzer.run()
         
         if results and save_results and calibration_name:
-            from Domains.Distance.storage import save_detection_coverage
+            from Domains.Distance.Storage import save_detection_coverage
             if save_detection_coverage(calibration_name, results):
                 print(f"Detection coverage saved to calibration '{calibration_name}'.")
         
@@ -517,7 +517,7 @@ def test_model_live():
     Legacy function: Tests the loaded distance model with live camera.
     Kept for backward compatibility.
     """
-    from Domains.Vision.interface import start_vision, stop_vision, detect_human_live
+    from Domains.Vision.Interface import start_vision, stop_vision, detect_human_live
     
     print("\nStarting live distance estimation test...")
     start_vision()
@@ -555,7 +555,7 @@ def test_model_live():
 
 
 if __name__ == "__main__":
-    from Domains.Distance.storage import list_calibrations, load_calibration_data
+    from Domains.Distance.Storage import list_calibrations, load_calibration_data
     
     calibrations = list_calibrations()
     

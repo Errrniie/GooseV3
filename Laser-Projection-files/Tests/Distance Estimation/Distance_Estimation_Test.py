@@ -27,8 +27,8 @@ if _project_root not in sys.path:
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from Domains.Vision.interface import start_vision, stop_vision
-from Config import network_config as net_cfg
+from Domains.Vision.Interface import start_vision, stop_vision
+import Config.Network_Config as net_cfg
 
 # FastAPI app for receiving coordinates
 app = FastAPI(title="Distance Estimation Test")
@@ -96,7 +96,7 @@ async def video_stream():
         frame_count = 0
         while True:
             try:
-                from Domains.Vision.interface import camera as yolo_camera
+                from Domains.Vision.Interface import camera as yolo_camera
                 if yolo_camera is None:
                     time.sleep(0.1)
                     continue

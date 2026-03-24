@@ -14,7 +14,7 @@ can start the same stream programmatically.
 
 import sys
 import subprocess
-from Config import network_config
+import Config.Network_Config as network_config
 
 
 def build_gst_cmd(laptop_ip: str, port: int = None) -> list:

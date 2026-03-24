@@ -244,7 +244,7 @@ def run_calibration_wizard() -> None:
     """
     Interactive calibration wizard for rotation_distance.
     
-    Run this as: python -c "from Domains.Laser.calibration import run_calibration_wizard; run_calibration_wizard()"
+    Run this as: python -c "from Domains.Laser.Calibration import run_calibration_wizard; run_calibration_wizard()"
     """
     print("\n" + "="*70)
     print("ROTATION_DISTANCE CALIBRATION WIZARD")

@@ -1,4 +1,4 @@
-from Domains.Motion.moonraker_client import MoonrakerWSClient
+from Domains.Motion.Moonraker_Client import MoonrakerWSClient
 import time
 
 
