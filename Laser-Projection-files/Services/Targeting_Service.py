@@ -1,1 +1,0 @@
-"""Targeting service module."""
