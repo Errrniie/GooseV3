@@ -2,7 +2,7 @@ torch
 torchvision
 torchaudio
 ultralytics
-opencv-python
-numpy
+opencv-python>=4.8,<4.12
+numpy>=1.26.0,<2.0
 websocket-client
 

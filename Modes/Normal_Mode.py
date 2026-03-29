@@ -2,12 +2,17 @@
 
 from Domains.Motion.Moonraker_Client import MoonrakerWSClient
 from Domains.Motion.Controller import MotionController
+from Domains.Motion.Runtime import (
+    set_active_motion_controller,
+    set_active_search_controller,
+)
 from Domains.Motion.Homing import home
 from Domains.Behavior.Search import SearchController, SearchConfig
 from Domains.Behavior.Tracking import TrackingController, TrackingConfig
 import Config.Motion_Config as cfg
 import Config.Network_Config as net_cfg
 from Domains.Vision.Interface import start_vision, stop_vision, get_latest_detection
+from Config.Manager import get_config_manager, init_config
 
 # --- System states ---
 STATE_INIT = "INIT"
@@ -19,24 +24,14 @@ TRACK_CONFIDENCE_THRESHOLD = 0.6
 
 
 def run() -> None:
+    init_config()
     state = STATE_INIT
     moonraker = MoonrakerWSClient(net_cfg.MOONRAKER_WS_URL)
     # Shared with finally so we only close Moonraker if connect() succeeded.
     ctx = {"moonraker_connected": False}
-    motion_cfg = {
-        "limits": {
-            "x": [cfg.X_MIN, cfg.X_MAX],
-            "y": [cfg.Y_MIN, cfg.Y_MAX],
-            "z": [cfg.Z_MIN, cfg.Z_MAX],
-        },
-        "neutral": {
-            "x": cfg.NEUTRAL_X,
-            "y": cfg.NEUTRAL_Y,
-            "z": cfg.NEUTRAL_Z,
-        },
-        "speeds": {"travel": cfg.TRAVEL_SPEED, "z": cfg.Z_SPEED},
-    }
+    motion_cfg = get_config_manager().motion_controller_dict()
     motion = MotionController(moonraker, motion_cfg)
+    set_active_motion_controller(motion)
 
     search = SearchController(
         SearchConfig(
@@ -46,11 +41,12 @@ def run() -> None:
             step_size=1.0,
         )
     )
+    set_active_search_controller(search)
 
     tracker = TrackingController(
         TrackingConfig(
-            frame_width=2048,
-            frame_height=1536,
+            frame_width=1920,
+            frame_height=1080,
             deadzone_px=30,
             kp=0.003,
             max_step_mm=3.0,
@@ -124,6 +120,8 @@ def run() -> None:
                 print("Shutdown complete.")
                 break
     finally:
+        set_active_search_controller(None)
+        set_active_motion_controller(None)
         try:
             stop_vision()
         except Exception:

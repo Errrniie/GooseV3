@@ -64,6 +64,28 @@ class MotionController:
         # Deadband disabled for smooth streaming
         self._deadband_z: float = 0.0
 
+    def apply_runtime_config(self, config: Dict[str, Any]) -> None:
+        """
+        Update streaming parameters and limits from the same dict shape as __init__.
+        Call after API/config manager changes so a running controller picks up new values.
+        """
+        with self._lock:
+            if "limits" in config:
+                self._limits = config["limits"]
+            if "neutral" in config:
+                self._neutral = config["neutral"]
+            if "speeds" in config:
+                self._speeds = config["speeds"]
+            if "send_rate_hz" in config:
+                self._send_rate_hz = float(config["send_rate_hz"])
+                self._send_period_s = 1.0 / self._send_rate_hz
+            if "mm_per_degree" in config:
+                self._z_deg_to_mm = float(config["mm_per_degree"])
+            if "feedrate_multiplier" in config:
+                self._feedrate_multiplier = float(config["feedrate_multiplier"])
+            if "angular_velocity" in config:
+                self._angular_velocity = float(config["angular_velocity"])
+
     # -- Intent Setting (non-blocking, called by behavior modules) --
 
     def set_intent(

@@ -56,7 +56,7 @@ def start_vision():
 
     if camera is None:
         # Use /dev/video0 by default; adjust index if your camera is on a different device.
-        camera = CameraThread(index=0, width=2048, height=1536, fps=30)
+        camera = CameraThread(index=0, width=1920, height=1080, fps=30)
     
     _stop_event.clear()
     

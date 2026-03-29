@@ -32,7 +32,7 @@ def build_gst_cmd(laptop_ip: str, port: int = None) -> list:
     
     pipeline = (
         "nvarguscamerasrc ! "
-        "video/x-raw(memory:NVMM),width=2048,height=1536,framerate=30/1 ! "
+        "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=30/1 ! "
         "nvvidconv ! video/x-raw,format=BGRx ! "
         "videoconvert ! "
         "queue max-size-buffers=0 max-size-time=0 max-size-bytes=0 ! "

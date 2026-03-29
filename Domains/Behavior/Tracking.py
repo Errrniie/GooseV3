@@ -23,8 +23,8 @@ from typing import Optional, Tuple
 @dataclass
 class TrackingConfig:
     """Tracking controller configuration."""
-    frame_width: int = 2048        # Camera frame width in pixels
-    frame_height: int = 1536        # Camera frame height in pixels
+    frame_width: int = 1920        # Camera frame width in pixels (1080p)
+    frame_height: int = 1080        # Camera frame height in pixels (1080p)
     deadzone_px: int = 30           # Pixels from center to ignore (avoids jitter)
     kp: float = 0.003               # Proportional gain (pixels → mm)
     max_step_mm: float = 3.0        # Maximum Z delta per step (clamp)

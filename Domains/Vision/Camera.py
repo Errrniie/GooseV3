@@ -10,7 +10,7 @@ from Tools.Scripts.Start_Stream import (
 )
 
 class CameraThread:
-    def __init__(self, index=0, width=2048, height=1536, fps=30):
+    def __init__(self, index=0, width=1920, height=1080, fps=30):
         """
         Initialize camera using nvarguscamerasrc via GStreamer (same as streaming).
         This ensures consistency - both frame capture and streaming use the same camera source.

@@ -1,3 +1,4 @@
+import threading
 from dataclasses import dataclass, field
 
 
@@ -24,10 +25,27 @@ class SearchController:
         self._current_z: float = config.start_z
         self._direction: int = config.initial_direction
         self._step_size: float = config.step_size
+        self._lock = threading.Lock()
+
+    def apply_runtime_z_bounds(
+        self, min_z: float, max_z: float, start_z: float
+    ) -> None:
+        """
+        Update Z limits and nominal start from config manager / API while running.
+        Clamps current position into the new range and refreshes sweep direction.
+        """
+        with self._lock:
+            self._config.min_z = min_z
+            self._config.max_z = max_z
+            self._config.start_z = start_z
+            self._current_z = max(min_z, min(max_z, self._current_z))
+            mid = (max_z + min_z) / 2.0
+            self._direction = -1 if self._current_z >= mid else 1
 
     def reset(self) -> None:
-        self._current_z = self._config.start_z
-        self._direction = self._config.initial_direction
+        with self._lock:
+            self._current_z = self._config.start_z
+            self._direction = self._config.initial_direction
 
     def sync_to_position(self, z_mm: float) -> None:
         """
@@ -37,14 +55,13 @@ class SearchController:
         Args:
             z_mm: The actual current Z position in mm
         """
-        # Clamp to valid range
-        z_mm = max(self._config.min_z, min(self._config.max_z, z_mm))
-        self._current_z = z_mm
-        # Set direction based on position (if near max, go down; if near min, go up)
-        if z_mm >= (self._config.max_z + self._config.min_z) / 2:
-            self._direction = -1
-        else:
-            self._direction = 1
+        with self._lock:
+            z_mm = max(self._config.min_z, min(self._config.max_z, z_mm))
+            self._current_z = z_mm
+            if z_mm >= (self._config.max_z + self._config.min_z) / 2:
+                self._direction = -1
+            else:
+                self._direction = 1
 
     def update(self) -> dict:
         """
@@ -54,26 +71,25 @@ class SearchController:
         
         Always ensures the returned delta keeps Z within [min_z, max_z] bounds.
         """
-        # Safety: Clamp current position to valid range (in case of desync)
-        self._current_z = max(self._config.min_z, min(self._config.max_z, self._current_z))
-        
-        # Compute next position
-        delta = self._step_size * self._direction
-        next_z = self._current_z + delta
+        with self._lock:
+            self._current_z = max(
+                self._config.min_z, min(self._config.max_z, self._current_z)
+            )
 
-        # Bounce at bounds - ensure we never exceed limits
-        if next_z >= self._config.max_z:
-            next_z = self._config.max_z
+            delta = self._step_size * self._direction
+            next_z = self._current_z + delta
+
+            if next_z >= self._config.max_z:
+                next_z = self._config.max_z
+                delta = next_z - self._current_z
+                self._direction = -1
+            elif next_z <= self._config.min_z:
+                next_z = self._config.min_z
+                delta = next_z - self._current_z
+                self._direction = 1
+
+            next_z = max(self._config.min_z, min(self._config.max_z, next_z))
             delta = next_z - self._current_z
-            self._direction = -1
-        elif next_z <= self._config.min_z:
-            next_z = self._config.min_z
-            delta = next_z - self._current_z
-            self._direction = 1
 
-        # Final safety check: ensure next_z is within bounds
-        next_z = max(self._config.min_z, min(self._config.max_z, next_z))
-        delta = next_z - self._current_z
-
-        self._current_z = next_z
-        return {"z_delta": delta, "z_absolute": next_z}
+            self._current_z = next_z
+            return {"z_delta": delta, "z_absolute": next_z}

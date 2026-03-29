@@ -49,8 +49,8 @@ import Config.Network_Config as net_cfg
 
 # Camera
 CAMERA_INDEX = 4
-CAMERA_WIDTH = 2048
-CAMERA_HEIGHT = 1536
+CAMERA_WIDTH = 1920
+CAMERA_HEIGHT = 1080
 CAMERA_FPS = 30
 
 # YOLO target classes and confidence thresholds

@@ -25,10 +25,12 @@ from pydantic import BaseModel, field_validator
 from Core.ModeManager import list_registered_modes, select_mode
 from Networking.Local_IP import get_ethernet_ipv4
 
-import Config.Network_Config as net_cfg
-import Config.Motion_Config as motion_cfg
+from Config.Manager import get_config_manager, init_config
+from Domains.Motion.Runtime import notify_motion_config_changed
 
-app = FastAPI(title="GooseV3 Control API", version="0.3.0")
+init_config()
+
+app = FastAPI(title="GooseV3 Control API", version="0.4.0")
 
 
 # ============================================================================
@@ -102,33 +104,22 @@ def get_system_network():
     Jetson IPv4 (Ethernet), saved peer IP (LAPTOP_IP), and stream port — for pairing UIs.
     """
     jetson = get_ethernet_ipv4()
+    n = get_config_manager().network
     return {
         "jetson_ip": jetson,
-        "peer_ip": net_cfg.LAPTOP_IP,
-        "stream_port": net_cfg.STREAM_PORT,
-        "control_api_port": net_cfg.CONTROL_API_PORT,
+        "peer_ip": n.laptop_ip,
+        "stream_port": n.stream_port,
+        "control_api_port": n.control_api_port,
     }
 
 
 @app.post("/system/handshake")
 def post_system_handshake(body: HandshakeRequest):
     """
-    Client sends its IPv4; we save it to Config/Network_Config.py as LAPTOP_IP
-    (video stream target) and return this device's Ethernet IPv4 so both sides can store it.
+    Client sends its IPv4; we persist it as LAPTOP_IP (video stream target) in
+    runtime_config.json and sync Config modules.
     """
-    path = net_cfg.__file__
-    with open(path, "r", encoding="utf-8") as f:
-        text = f.read()
-
-    text = _patch_assignment_line(
-        text, "LAPTOP_IP", f'"{body.client_ip}"'
-    )
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-
-    import importlib
-
-    importlib.reload(net_cfg)
+    get_config_manager().update_network(laptop_ip=body.client_ip)
 
     jetson = get_ethernet_ipv4()
     print(
@@ -139,7 +130,7 @@ def post_system_handshake(body: HandshakeRequest):
         "status": "ok",
         "jetson_ip": jetson,
         "peer_ip_saved": body.client_ip,
-        "stream_port": net_cfg.STREAM_PORT,
+        "stream_port": get_config_manager().network.stream_port,
     }
 
 
@@ -192,76 +183,46 @@ def move_laser(payload: MoveLaserRequest):
 @app.get("/config/network")
 def get_network_config():
     """
-    Return current network-related config values.
+    Return current network-related config values (runtime + JSON).
     """
+    n = get_config_manager().network
     return {
-        "moonraker_host": net_cfg.MOONRAKER_HOST,
-        "moonraker_port": net_cfg.MOONRAKER_PORT,
-        "moonraker_ws_path": net_cfg.MOONRAKER_WS_PATH,
-        "esp32_ip": net_cfg.ESP32_IP,
-        "laptop_ip": net_cfg.LAPTOP_IP,
-        "stream_port": net_cfg.STREAM_PORT,
+        "moonraker_host": n.moonraker_host,
+        "moonraker_port": n.moonraker_port,
+        "moonraker_ws_path": n.moonraker_ws_path,
+        "esp32_ip": n.esp32_ip,
+        "laptop_ip": n.laptop_ip,
+        "stream_port": n.stream_port,
     }
-
-
-def _patch_assignment_line(text: str, name: str, new_value: str) -> str:
-    """
-    Very small helper to replace a single `NAME = ...` line in a config .py file.
-    We keep it explicit to avoid clever parsing.
-    """
-    lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if line.lstrip().startswith(f"{name} ="):
-            indent = line[: len(line) - len(line.lstrip())]
-            lines[i] = f"{indent}{name} = {new_value}"
-            break
-    return "\n".join(lines) + "\n"
 
 
 @app.post("/config/network")
 def update_network_config(update: NetworkConfigUpdate):
     """
-    Update selected fields in Config/network_config.py.
+    Update selected network fields; persisted to runtime_config.json.
     Only fields provided in the payload are changed.
     """
-    path = net_cfg.__file__
-    with open(path, "r", encoding="utf-8") as f:
-        text = f.read()
-
-    changed = {}
-
+    mgr = get_config_manager()
+    kwargs = {}
     if update.moonraker_host is not None:
-        text = _patch_assignment_line(
-            text, "MOONRAKER_HOST", f'"{update.moonraker_host}"'
-        )
-        changed["moonraker_host"] = update.moonraker_host
-
+        kwargs["moonraker_host"] = update.moonraker_host
     if update.moonraker_port is not None:
-        text = _patch_assignment_line(text, "MOONRAKER_PORT", str(update.moonraker_port))
-        changed["moonraker_port"] = update.moonraker_port
-
+        kwargs["moonraker_port"] = update.moonraker_port
     if update.esp32_ip is not None:
-        text = _patch_assignment_line(text, "ESP32_IP", f'"{update.esp32_ip}"')
-        changed["esp32_ip"] = update.esp32_ip
-
-    if changed:
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text)
-
-    # Re-import to reflect changes for future reads in this process
-    import importlib
-
-    importlib.reload(net_cfg)
-
+        kwargs["esp32_ip"] = update.esp32_ip
+    changed = dict(kwargs)
+    if kwargs:
+        mgr.update_network(**kwargs)
+    n = mgr.network
     return {
         "updated": changed,
         "current": {
-            "moonraker_host": net_cfg.MOONRAKER_HOST,
-            "moonraker_port": net_cfg.MOONRAKER_PORT,
-            "moonraker_ws_path": net_cfg.MOONRAKER_WS_PATH,
-            "esp32_ip": net_cfg.ESP32_IP,
-            "laptop_ip": net_cfg.LAPTOP_IP,
-            "stream_port": net_cfg.STREAM_PORT,
+            "moonraker_host": n.moonraker_host,
+            "moonraker_port": n.moonraker_port,
+            "moonraker_ws_path": n.moonraker_ws_path,
+            "esp32_ip": n.esp32_ip,
+            "laptop_ip": n.laptop_ip,
+            "stream_port": n.stream_port,
         },
     }
 
@@ -276,67 +237,35 @@ def get_motion_config():
     """
     Return a subset of motion config values that are safe to tweak at runtime.
     """
+    m = get_config_manager().motion
     return {
-        "x_min": motion_cfg.X_MIN,
-        "x_max": motion_cfg.X_MAX,
-        "y_min": motion_cfg.Y_MIN,
-        "y_max": motion_cfg.Y_MAX,
-        "z_min": motion_cfg.Z_MIN,
-        "z_max": motion_cfg.Z_MAX,
-        "neutral_x": motion_cfg.NEUTRAL_X,
-        "neutral_y": motion_cfg.NEUTRAL_Y,
-        "neutral_z": motion_cfg.NEUTRAL_Z,
-        "travel_speed": motion_cfg.TRAVEL_SPEED,
-        "z_speed": motion_cfg.Z_SPEED,
-        "send_rate_hz": motion_cfg.SEND_RATE_HZ,
-        "feedrate_multiplier": motion_cfg.FEEDRATE_MULTIPLIER,
+        "x_min": m.x_min,
+        "x_max": m.x_max,
+        "y_min": m.y_min,
+        "y_max": m.y_max,
+        "z_min": m.z_min,
+        "z_max": m.z_max,
+        "neutral_x": m.neutral_x,
+        "neutral_y": m.neutral_y,
+        "neutral_z": m.neutral_z,
+        "travel_speed": m.travel_speed,
+        "z_speed": m.z_speed,
+        "send_rate_hz": m.send_rate_hz,
+        "feedrate_multiplier": m.feedrate_multiplier,
     }
 
 
 @app.post("/config/motion")
 def update_motion_config(update: MotionConfigUpdate):
     """
-    Update selected fields in Config/motion_config.py.
+    Update selected motion fields; persisted to runtime_config.json and synced to Config modules.
     Only fields provided in the payload are changed.
     """
-    path = motion_cfg.__file__
-    with open(path, "r", encoding="utf-8") as f:
-        text = f.read()
-
-    changed = {}
-
-    def apply(field_name: str, cfg_name: str, value):
-        nonlocal text
-        if value is None:
-            return
-        text = _patch_assignment_line(text, cfg_name, str(value))
-        changed[field_name] = value
-
-    apply("x_min", "X_MIN", update.x_min)
-    apply("x_max", "X_MAX", update.x_max)
-    apply("y_min", "Y_MIN", update.y_min)
-    apply("y_max", "Y_MAX", update.y_max)
-    apply("z_min", "Z_MIN", update.z_min)
-    apply("z_max", "Z_MAX", update.z_max)
-
-    apply("neutral_x", "NEUTRAL_X", update.neutral_x)
-    apply("neutral_y", "NEUTRAL_Y", update.neutral_y)
-    apply("neutral_z", "NEUTRAL_Z", update.neutral_z)
-
-    apply("travel_speed", "TRAVEL_SPEED", update.travel_speed)
-    apply("z_speed", "Z_SPEED", update.z_speed)
-
-    apply("send_rate_hz", "SEND_RATE_HZ", update.send_rate_hz)
-    apply("feedrate_multiplier", "FEEDRATE_MULTIPLIER", update.feedrate_multiplier)
-
-    if changed:
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text)
-
-    import importlib
-
-    importlib.reload(motion_cfg)
-
+    raw = update.model_dump(exclude_unset=True, exclude_none=True)
+    changed = dict(raw)
+    if raw:
+        get_config_manager().update_motion(**raw)
+        notify_motion_config_changed()
     return {
         "updated": changed,
         "current": get_motion_config(),

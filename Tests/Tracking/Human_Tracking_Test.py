@@ -111,8 +111,8 @@ def main():
 
     # 7) Tracking controller - centers camera on detected person
     tracking_cfg = TrackingConfig(
-        frame_width=2048,
-        frame_height=1536,
+        frame_width=1920,
+        frame_height=1080,
         deadzone_px=40,
         kp=0.003,
         max_step_mm=2.0,
