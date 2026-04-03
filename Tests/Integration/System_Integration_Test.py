@@ -90,12 +90,9 @@ MOTION_CONFIG = {
     },
     "speeds": {
         "travel": 6000,
-        "z": 100,
     },
-    "send_rate_hz": 0.5,
     "mm_per_degree": 8.0 / 360.0,
-    "feedrate_multiplier": 2.0,
-    "angular_velocity": 60.0,
+    "move_z_velocity": 2.0,
 }
 
 # Search config (Z axis not used for galvo; kept for compatibility)

@@ -11,11 +11,13 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from Domains.Behavior.Search import SearchController
+    from Domains.Behavior.Tracking import TrackingController
     from Domains.Motion.Controller import MotionController
 
 _lock = threading.RLock()
 _active_motion: Optional[MotionController] = None
 _active_search: Optional[SearchController] = None
+_active_tracking: Optional["TrackingController"] = None
 
 
 def set_active_motion_controller(controller: Optional[MotionController]) -> None:
@@ -32,6 +34,13 @@ def set_active_search_controller(controller: Optional[SearchController]) -> None
         _active_search = controller
 
 
+def set_active_tracking_controller(controller: Optional["TrackingController"]) -> None:
+    """Register the current pipeline TrackingController, or None when the pipeline exits."""
+    global _active_tracking
+    with _lock:
+        _active_tracking = controller
+
+
 def notify_motion_config_changed() -> None:
     """
     After motion settings are updated (manager + JSON), push new values into the
@@ -46,8 +55,13 @@ def notify_motion_config_changed() -> None:
     with _lock:
         motion_ctrl = _active_motion
         search_ctrl = _active_search
+        tracking_ctrl = _active_tracking
 
     if motion_ctrl is not None:
         motion_ctrl.apply_runtime_config(motion_dict)
     if search_ctrl is not None:
-        search_ctrl.apply_runtime_z_bounds(m.z_min, m.z_max, m.neutral_z)
+        search_ctrl.apply_runtime_z_bounds(
+            m.z_min, m.z_max, m.neutral_z, m.search_step_mm
+        )
+    if tracking_ctrl is not None:
+        tracking_ctrl.apply_runtime_config(mgr.tracking_config_dict())

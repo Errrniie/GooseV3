@@ -5,6 +5,7 @@ from Domains.Motion.Controller import MotionController
 from Domains.Motion.Runtime import (
     set_active_motion_controller,
     set_active_search_controller,
+    set_active_tracking_controller,
 )
 from Domains.Motion.Homing import home
 from Domains.Behavior.Search import SearchController, SearchConfig
@@ -19,8 +20,6 @@ STATE_INIT = "INIT"
 STATE_SEARCH = "SEARCH"
 STATE_TRACK = "TRACK"
 STATE_SHUTDOWN = "SHUTDOWN"
-
-TRACK_CONFIDENCE_THRESHOLD = 0.6
 
 
 def run() -> None:
@@ -38,21 +37,26 @@ def run() -> None:
             min_z=cfg.Z_MIN,
             max_z=cfg.Z_MAX,
             start_z=cfg.NEUTRAL_Z,
-            step_size=1.0,
+            step_size=cfg.SEARCH_STEP_MM,
         )
     )
     set_active_search_controller(search)
 
     tracker = TrackingController(
         TrackingConfig(
-            frame_width=1920,
-            frame_height=1080,
-            deadzone_px=30,
-            kp=0.003,
-            max_step_mm=3.0,
-            confidence_threshold=TRACK_CONFIDENCE_THRESHOLD,
+            frame_width=cfg.CAMERA_WIDTH,
+            frame_height=cfg.CAMERA_HEIGHT,
+            deadzone_px=cfg.TRACKING_DEADZONE_PX,
+            kp=cfg.TRACKING_KP,
+            ki=cfg.TRACKING_KI,
+            integral_max_px=cfg.TRACKING_INTEGRAL_MAX_PX,
+            min_step_mm=cfg.TRACKING_MIN_STEP_MM,
+            max_step_mm=cfg.TRACKING_MAX_STEP_MM,
+            confidence_threshold=cfg.DETECTION_CONFIDENCE_THRESHOLD,
+            target_lost_frames=cfg.TRACKING_TARGET_LOST_FRAMES,
         )
     )
+    set_active_tracking_controller(tracker)
 
     try:
         while True:
@@ -72,7 +76,7 @@ def run() -> None:
                 detection = get_latest_detection()
                 if (
                     detection.has_target
-                    and detection.confidence >= TRACK_CONFIDENCE_THRESHOLD
+                    and detection.confidence >= cfg.DETECTION_CONFIDENCE_THRESHOLD
                 ):
                     print(
                         f"[SEARCH] Target acquired! Center: {detection.bbox_center}, "
@@ -97,13 +101,29 @@ def run() -> None:
                 if tracker.is_target_lost():
                     print("[TRACK] Target lost!")
                     print("[STATE] TRACK -> SEARCH")
+                    base_z = motion.logical_z_mm
+                    if base_z is None:
+                        base_z = cfg.NEUTRAL_Z
+                    z_snap = max(
+                        cfg.Z_MIN, min(cfg.Z_MAX, round(base_z))
+                    )
+                    delta = z_snap - base_z
+                    if abs(delta) > 1e-6:
+                        print(
+                            f"[TRACK→SEARCH] Snap Z: {base_z:.4f}mm → {z_snap:.0f}mm "
+                            f"(delta {delta:+.4f}mm)"
+                        )
+                        motion.move_z_relative_blocking(delta)
+                    search.sync_after_track(z_snap, cfg.SEARCH_STEP_MM)
+                    tracker.reset()
                     state = STATE_SEARCH
                     continue
 
                 if track_result["should_move"]:
                     z_delta = track_result["z_delta"]
                     print(
-                        f"[TRACK] error={track_result['error_px']:.0f}px -> "
+                        f"[TRACK] error={track_result['error_px']:.0f}px "
+                        f"I={track_result['integral_px']:.0f} -> "
                         f"z_delta={z_delta:+.3f}mm"
                     )
                     motion.move_z_relative_blocking(z_delta)
@@ -120,6 +140,7 @@ def run() -> None:
                 print("Shutdown complete.")
                 break
     finally:
+        set_active_tracking_controller(None)
         set_active_search_controller(None)
         set_active_motion_controller(None)
         try:

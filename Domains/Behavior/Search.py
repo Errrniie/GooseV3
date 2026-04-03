@@ -28,16 +28,24 @@ class SearchController:
         self._lock = threading.Lock()
 
     def apply_runtime_z_bounds(
-        self, min_z: float, max_z: float, start_z: float
+        self,
+        min_z: float,
+        max_z: float,
+        start_z: float,
+        step_size_mm: float | None = None,
     ) -> None:
         """
         Update Z limits and nominal start from config manager / API while running.
         Clamps current position into the new range and refreshes sweep direction.
+        Optionally updates per-step size (SEARCH_STEP_MM).
         """
         with self._lock:
             self._config.min_z = min_z
             self._config.max_z = max_z
             self._config.start_z = start_z
+            if step_size_mm is not None:
+                self._config.step_size = float(step_size_mm)
+                self._step_size = float(step_size_mm)
             self._current_z = max(min_z, min(max_z, self._current_z))
             mid = (max_z + min_z) / 2.0
             self._direction = -1 if self._current_z >= mid else 1
@@ -93,3 +101,14 @@ class SearchController:
 
             self._current_z = next_z
             return {"z_delta": delta, "z_absolute": next_z}
+
+    def sync_after_track(self, z_mm: float, step_size_mm: float) -> None:
+        """
+        After TRACK → SEARCH: align internal Z to snapped physical Z and apply search step from config.
+        """
+        with self._lock:
+            z_mm = max(self._config.min_z, min(self._config.max_z, z_mm))
+            self._current_z = z_mm
+            self._step_size = step_size_mm
+            mid = (self._config.max_z + self._config.min_z) / 2.0
+            self._direction = -1 if self._current_z >= mid else 1

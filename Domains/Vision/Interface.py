@@ -3,6 +3,7 @@ import signal
 import time
 from Domains.Vision.Detection import detect_human
 from Domains.Vision.Camera import CameraThread
+import Config.Motion_Config as mcfg
 import cv2
 import threading
 import queue
@@ -27,9 +28,6 @@ class VisionState:
 _vision_state = VisionState()
 _vision_state_lock = threading.Lock()
 
-# Staleness threshold: detections older than this are considered invalid
-STALENESS_THRESHOLD_S = 0.5
-
 # --- Globals ---
 camera = None
 _display_thread = None
@@ -47,20 +45,22 @@ _HAS_DISPLAY = os.getenv("DISPLAY") is not None
 def start_vision():
     """
     Initializes and starts all vision-related threads.
-    
-    Note: Video streaming is automatically started by CameraThread.start()
-    if LAPTOP_IP is configured in Config/network_config.py
+
+    If LAPTOP_IP is set, H.264 UDP to the laptop is part of the same GStreamer
+    pipeline as frame capture (tee), not a second camera process.
     """
     global camera, _display_thread, _vision_thread
     print("Vision system starting...")
 
     if camera is None:
         # Use /dev/video0 by default; adjust index if your camera is on a different device.
-        camera = CameraThread(index=0, width=1920, height=1080, fps=30)
+        camera = CameraThread(
+            index=0, width=mcfg.CAMERA_WIDTH, height=mcfg.CAMERA_HEIGHT, fps=30
+        )
     
     _stop_event.clear()
     
-    # Start all threads (CameraThread.start() will automatically start streaming if configured)
+    # Start capture thread (UDP branch is already in the unified GStreamer graph when LAPTOP_IP is set)
     camera.start()
     
     _vision_thread = threading.Thread(target=_vision_worker, daemon=True)
@@ -73,9 +73,7 @@ def start_vision():
 
 def stop_vision():
     """
-    Stops all vision-related threads and releases resources.
-    
-    Note: Video streaming is automatically stopped by CameraThread.stop()
+    Stops all vision-related threads and releases the camera pipeline (including UDP branch).
     """
     global camera, _display_thread, _vision_thread
     print("Vision system stopping...")
@@ -182,8 +180,8 @@ def get_latest_detection() -> VisionState:
     Non-blocking read of the latest detection state.
     
     Returns a copy of the current VisionState.
-    Automatically applies staleness check: if detection is older than
-    STALENESS_THRESHOLD_S, returns has_target=False.
+    Applies staleness using Config.Motion_Config.VISION_STALENESS_S: older
+    detections are returned as has_target=False.
     
     Usage in Main.py:
         state = get_latest_detection()
@@ -201,9 +199,9 @@ def get_latest_detection() -> VisionState:
             confidence=_vision_state.confidence,
         )
     
-    # Apply staleness check
+    # Apply staleness check (Config.Motion_Config.VISION_STALENESS_S)
     age = time.time() - state.timestamp
-    if age > STALENESS_THRESHOLD_S:
+    if age > float(mcfg.VISION_STALENESS_S):
         state.has_target = False
         state.bbox_center = None
         state.bbox = None

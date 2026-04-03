@@ -1,6 +1,7 @@
 from ultralytics import YOLO
 
-CONF_THRESH = 0.6
+import Config.Motion_Config as mcfg
+
 MODEL_PATH = "yolov8n.pt"
 DEVICE = "cuda"
 
@@ -10,6 +11,10 @@ model.to(DEVICE)
 def detect_human(frame):
     """
     Runs YOLO once to detect humans and birds.
+
+    `frame` is a BGR uint8 numpy array (same shape as from CameraThread.get_frame(),
+    whether frames come from the unified GStreamer appsink path or V4L2 fallback).
+
     Returns:
         target_detected (bool)
         bbox_center (cx, cy) or None
@@ -17,10 +22,11 @@ def detect_human(frame):
         confidence (float)
         class_id (int) - 0=person, 14=bird
     """
+    conf = float(mcfg.DETECTION_CONFIDENCE_THRESHOLD)
     results = model(
         frame,
         device=0,
-        conf=CONF_THRESH,
+        conf=conf,
         classes=[0, 14],  # 0=person, 14=bird
         verbose=False
     )

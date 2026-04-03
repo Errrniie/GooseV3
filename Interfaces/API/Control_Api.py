@@ -1,23 +1,36 @@
 """
 Simple FastAPI control server for GooseV3.
 
-Run this on the Jetson, then send HTTP requests from your laptop to:
-  http://<JETSON_IP>:8000/start_tracking
-  http://<JETSON_IP>:8000/stop_tracking
-  http://<JETSON_IP>:8000/move_laser
-  http://<JETSON_IP>:8000/system/modes
-  http://<JETSON_IP>:8000/system/mode  (POST JSON {\"mode\": \"normal\"} or \"test\")
-  http://<JETSON_IP>:8000/system/network  (GET — Jetson + peer/stream info)
-  http://<JETSON_IP>:8000/system/handshake  (POST JSON {\"client_ip\": \"<laptop IPv4>\"})
+Run this on the Jetson, then send HTTP requests from your laptop, e.g.:
 
-Right now this is a thin test harness:
-  - It toggles in-process flags
-  - It logs commands (e.g. move_laser) to stdout
+  Laser (ESP32 power — see Domains/Laser/Esp_32.py):
+    GET  http://<JETSON_IP>:8000/laser/status
+    POST http://<JETSON_IP>:8000/laser/on
+    POST http://<JETSON_IP>:8000/laser/off
 
-Later we can wire these endpoints into real motion / tracking code.
+  Tracking flags / legacy:
+    POST http://<JETSON_IP>:8000/start_tracking
+    POST http://<JETSON_IP>:8000/stop_tracking
+    POST http://<JETSON_IP>:8000/move_laser   (body JSON {"x": float, "y": float} — reserved for future aim)
+
+  Modes / pairing:
+    GET  http://<JETSON_IP>:8000/system/modes
+    POST http://<JETSON_IP>:8000/system/mode   (JSON {"mode": "normal"} or "test")
+    GET  http://<JETSON_IP>:8000/system/network
+    POST http://<JETSON_IP>:8000/system/handshake  (JSON {"client_ip": "<laptop IPv4>"})
+
+  Config:
+    GET/POST http://<JETSON_IP>:8000/config/network
+    GET/POST http://<JETSON_IP>:8000/config/motion
+
+  Vision (latest detection for laptop overlay):
+    GET http://<JETSON_IP>:8000/vision/detection
+
+ESP32 IP comes from runtime config (``esp32_ip``); set via POST /config/network if needed.
 """
 
 import ipaddress
+from dataclasses import asdict
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, field_validator
@@ -26,11 +39,18 @@ from Core.ModeManager import list_registered_modes, select_mode
 from Networking.Local_IP import get_ethernet_ipv4
 
 from Config.Manager import get_config_manager, init_config
+from Domains.Laser.Esp_32 import LaserController
 from Domains.Motion.Runtime import notify_motion_config_changed
 
 init_config()
 
-app = FastAPI(title="GooseV3 Control API", version="0.4.0")
+app = FastAPI(title="GooseV3 Control API", version="0.5.0")
+
+
+def _esp_laser() -> LaserController:
+    """Laser controller using current runtime ``esp32_ip`` (not a cached default)."""
+    ip = get_config_manager().network.esp32_ip
+    return LaserController(ip_address=ip)
 
 
 # ============================================================================
@@ -81,11 +101,26 @@ class MotionConfigUpdate(BaseModel):
 
     # Speeds
     travel_speed: float | None = None
-    z_speed: float | None = None
+    move_z_velocity: float | None = None
 
-    # Timing
-    send_rate_hz: float | None = None
-    feedrate_multiplier: float | None = None
+    search_angular_velocity: float | None = None
+    rotation_distance_mm: float | None = None
+    degrees_per_revolution: float | None = None
+    max_angular_velocity: float | None = None
+
+    # Camera, vision, tracking
+    camera_width: int | None = None
+    camera_height: int | None = None
+    search_step_mm: float | None = None
+    detection_confidence_threshold: float | None = None
+    vision_staleness_s: float | None = None
+    tracking_kp: float | None = None
+    tracking_ki: float | None = None
+    tracking_integral_max_px: float | None = None
+    tracking_deadzone_px: int | None = None
+    tracking_min_step_mm: float | None = None
+    tracking_max_step_mm: float | None = None
+    tracking_target_lost_frames: int | None = None
 
 
 # Simple in-memory state flags (per-process)
@@ -167,12 +202,66 @@ def stop_tracking():
 @app.post("/move_laser")
 def move_laser(payload: MoveLaserRequest):
     """
-    Test endpoint to drive laser motion parameters from the network.
-    For now this only logs; later we can hook into MotionController / laser code.
+    Reserved for future mirror / aim commands (x, y in mm or logical units).
+    ESP32 laser power: use POST /laser/on and POST /laser/off.
     """
     print(f"[CONTROL] move_laser requested: x={payload.x}, y={payload.y}")
-    # TODO: integrate with MotionController and/or LaserEnable here
     return {"status": "ok", "x": payload.x, "y": payload.y}
+
+
+# ============================================================================
+# Laser (ESP32 HTTP: /high, /low, /status)
+# ============================================================================
+
+
+@app.get("/laser/status")
+def laser_status():
+    """
+    Query ESP32 for laser pin state (JSON ``state``: typically HIGH / LOW).
+    """
+    state = _esp_laser().get_status()
+    if state is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Could not read laser status from ESP32 (check esp32_ip and device).",
+        )
+    return {
+        "status": "ok",
+        "laser_state": state,
+        "esp32_ip": get_config_manager().network.esp32_ip,
+    }
+
+
+@app.post("/laser/on")
+def laser_on():
+    """Turn the laser ON via ESP32 (HTTP GET /high on the device)."""
+    ok = _esp_laser().turn_on()
+    if not ok:
+        raise HTTPException(
+            status_code=502,
+            detail="Laser ON failed (ESP32 unreachable or non-200 from /high).",
+        )
+    return {
+        "status": "ok",
+        "laser": "on",
+        "esp32_ip": get_config_manager().network.esp32_ip,
+    }
+
+
+@app.post("/laser/off")
+def laser_off():
+    """Turn the laser OFF via ESP32 (HTTP GET /low on the device)."""
+    ok = _esp_laser().turn_off()
+    if not ok:
+        raise HTTPException(
+            status_code=502,
+            detail="Laser OFF failed (ESP32 unreachable or non-200 from /low).",
+        )
+    return {
+        "status": "ok",
+        "laser": "off",
+        "esp32_ip": get_config_manager().network.esp32_ip,
+    }
 
 
 # ============================================================================
@@ -234,25 +323,8 @@ def update_network_config(update: NetworkConfigUpdate):
 
 @app.get("/config/motion")
 def get_motion_config():
-    """
-    Return a subset of motion config values that are safe to tweak at runtime.
-    """
-    m = get_config_manager().motion
-    return {
-        "x_min": m.x_min,
-        "x_max": m.x_max,
-        "y_min": m.y_min,
-        "y_max": m.y_max,
-        "z_min": m.z_min,
-        "z_max": m.z_max,
-        "neutral_x": m.neutral_x,
-        "neutral_y": m.neutral_y,
-        "neutral_z": m.neutral_z,
-        "travel_speed": m.travel_speed,
-        "z_speed": m.z_speed,
-        "send_rate_hz": m.send_rate_hz,
-        "feedrate_multiplier": m.feedrate_multiplier,
-    }
+    """Full motion snapshot (same keys as persisted ``motion`` in runtime_config.json)."""
+    return asdict(get_config_manager().motion)
 
 
 @app.post("/config/motion")
@@ -269,6 +341,31 @@ def update_motion_config(update: MotionConfigUpdate):
     return {
         "updated": changed,
         "current": get_motion_config(),
+    }
+
+
+@app.get("/vision/detection")
+def get_vision_detection():
+    """
+    Latest detection for client-side bbox overlay (poll ~10–30 Hz).
+    ``bbox`` is ``[x1, y1, x2, y2]`` in pixels or null.
+    """
+    from Domains.Vision.Interface import get_latest_detection
+
+    st = get_latest_detection()
+    m = get_config_manager().motion
+    bbox = (
+        [int(x) for x in st.bbox]
+        if st.bbox is not None
+        else None
+    )
+    return {
+        "has_target": st.has_target,
+        "bbox": bbox,
+        "confidence": st.confidence,
+        "timestamp": st.timestamp,
+        "frame_width": m.camera_width,
+        "frame_height": m.camera_height,
     }
 
 

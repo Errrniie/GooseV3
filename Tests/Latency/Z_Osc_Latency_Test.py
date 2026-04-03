@@ -39,12 +39,9 @@ def build_motion_controller(ws_client: MoonrakerWSClient) -> MotionController:
         },
         "speeds": {
             "travel": motion_cfg.TRAVEL_SPEED,
-            "z": motion_cfg.Z_SPEED,
         },
-        "send_rate_hz": motion_cfg.SEND_RATE_HZ,
         "mm_per_degree": motion_cfg.MM_PER_DEGREE,
-        "feedrate_multiplier": motion_cfg.FEEDRATE_MULTIPLIER,
-        "angular_velocity": motion_cfg.SEARCH_ANGULAR_VELOCITY,
+        "move_z_velocity": motion_cfg.MOVE_Z_VELOCITY,
     }
     return MotionController(ws_client, cfg)
 
@@ -89,7 +86,7 @@ def main():
                 step_index += 1
 
                 t0 = time.perf_counter()
-                # Velocity None → default 2.0 inside MotionController
+                # Velocity None → MotionController uses move_z_velocity from config
                 motion.move_z_relative_blocking(delta, velocity=None)
                 t1 = time.perf_counter()
 

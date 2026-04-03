@@ -29,6 +29,7 @@ if _project_root not in sys.path:
 
 from Domains.Motion.Moonraker_Client import MoonrakerWSClient
 from Domains.Motion.Homing import home
+from Config.Manager import init_config
 import Config.Motion_Config as motion_cfg
 import Config.Network_Config as net_cfg
 from Domains.Vision.Interface import start_vision, stop_vision, get_latest_detection
@@ -38,6 +39,7 @@ from Networking import test_api
 
 
 def main():
+    init_config()
     print("\n=== GooseV3 HUMAN TRACKING TEST ===")
     print("Moonraker URL:", net_cfg.MOONRAKER_WS_URL)
 
@@ -102,7 +104,7 @@ def main():
             min_z=motion_cfg.Z_MIN,
             max_z=motion_cfg.Z_MAX,
             start_z=motion_cfg.NEUTRAL_Z,  # Always use neutral_z from config
-            step_size=1.0,  # 1mm steps
+            step_size=motion_cfg.SEARCH_STEP_MM,
         )
     )
     # Sync SearchController to the actual starting position (ensures they match)
@@ -111,13 +113,15 @@ def main():
 
     # 7) Tracking controller - centers camera on detected person
     tracking_cfg = TrackingConfig(
-        frame_width=1920,
-        frame_height=1080,
+        frame_width=motion_cfg.CAMERA_WIDTH,
+        frame_height=motion_cfg.CAMERA_HEIGHT,
         deadzone_px=40,
         kp=0.003,
+        ki=motion_cfg.TRACKING_KI,
+        integral_max_px=motion_cfg.TRACKING_INTEGRAL_MAX_PX,
         max_step_mm=2.0,
         min_step_mm=0.05,
-        confidence_threshold=0.5,
+        confidence_threshold=motion_cfg.DETECTION_CONFIDENCE_THRESHOLD,
     )
     tracker = TrackingController(tracking_cfg)
 
@@ -174,7 +178,7 @@ def main():
                 
                 if abs(z_delta) > 0.01:  # Only move if meaningful
                     # Use same movement method as z_latency_test.py
-                    cmd = f"MOVE_Z D={z_delta:.2f} V=2.00"
+                    cmd = f"MOVE_Z D={z_delta:.2f} V={motion_cfg.MOVE_Z_VELOCITY:.2f}"
                     print(f"[SEARCH] Moving Z: {cmd}")
                     moonraker.send_gcode_and_wait_complete(cmd, timeout_s=10.0)
                     
@@ -214,7 +218,7 @@ def main():
                     
                     if abs(z_delta) > 0.01:  # Only move if meaningful
                         # Use same movement method as z_latency_test.py
-                        cmd = f"MOVE_Z D={z_delta:.2f} V=2.00"
+                        cmd = f"MOVE_Z D={z_delta:.2f} V={motion_cfg.MOVE_Z_VELOCITY:.2f}"
                         print(
                             f"[TRACK] error={track_result['error_px']:.0f}px → "
                             f"z_delta={z_delta:+.3f}mm"

@@ -44,13 +44,9 @@ def build_motion_controller(ws_client: MoonrakerWSClient) -> MotionController:
         },
         "speeds": {
             "travel": motion_cfg.TRAVEL_SPEED,
-            "z": motion_cfg.Z_SPEED,
         },
-        # Use default timing/geometry; Z moves use MOVE_Z anyway
-        "send_rate_hz": motion_cfg.SEND_RATE_HZ,
         "mm_per_degree": motion_cfg.MM_PER_DEGREE,
-        "feedrate_multiplier": motion_cfg.FEEDRATE_MULTIPLIER,
-        "angular_velocity": motion_cfg.SEARCH_ANGULAR_VELOCITY,
+        "move_z_velocity": motion_cfg.MOVE_Z_VELOCITY,
     }
     return MotionController(ws_client, cfg)
 

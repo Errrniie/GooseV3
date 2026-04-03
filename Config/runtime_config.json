@@ -1,6 +1,6 @@
 {
   "network": {
-    "moonraker_host": "192.168.8.146",
+    "moonraker_host": "192.168.8.127",
     "moonraker_port": 7125,
     "moonraker_ws_path": "/websocket",
     "esp32_ip": "192.168.8.186",
@@ -19,14 +19,24 @@
     "neutral_x": 5.75,
     "neutral_y": 3.8,
     "neutral_z": 3.0,
-    "travel_speed": 3000.0,
-    "z_speed": 5.0,
-    "send_rate_hz": 10.0,
-    "feedrate_multiplier": 2.0,
+    "travel_speed": 1000.0,
+    "move_z_velocity": 2.5,
     "search_angular_velocity": 60.0,
     "rotation_distance_mm": 8.0,
     "degrees_per_revolution": 360.0,
-    "max_angular_velocity": 90.0
+    "max_angular_velocity": 90.0,
+    "camera_width": 2028,
+    "camera_height": 1520,
+    "search_step_mm": 1.0,
+    "detection_confidence_threshold": 0.6,
+    "vision_staleness_s": 0.5,
+    "tracking_kp": 0.003,
+    "tracking_ki": 0.001,
+    "tracking_integral_max_px": 400.0,
+    "tracking_deadzone_px": 30,
+    "tracking_min_step_mm": 0.05,
+    "tracking_max_step_mm": 3.0,
+    "tracking_target_lost_frames": 60
   },
   "driver": {
     "sg_result_min_ok": 10,

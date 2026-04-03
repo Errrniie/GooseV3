@@ -26,7 +26,7 @@ from Networking.Local_IP import get_ethernet_ipv4
 
 
 def _cleanup_video_streams() -> None:
-    """Stop vision threads and any gst-launch UDP streams (Ctrl+C, SIGTERM, atexit)."""
+    """Stop vision (CameraThread GStreamer pipeline + threads) and any Test_Mode gst-launch UDP streams."""
     try:
         from Domains.Vision.Interface import stop_vision
 

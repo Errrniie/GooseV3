@@ -48,13 +48,24 @@ class MotionData:
     neutral_y: float
     neutral_z: float
     travel_speed: float
-    z_speed: float
-    send_rate_hz: float
-    feedrate_multiplier: float
+    move_z_velocity: float
     search_angular_velocity: float
     rotation_distance_mm: float
     degrees_per_revolution: float
     max_angular_velocity: float
+    # Camera / search / vision / tracking (see Config.Motion_Config)
+    camera_width: int
+    camera_height: int
+    search_step_mm: float
+    detection_confidence_threshold: float
+    vision_staleness_s: float
+    tracking_kp: float
+    tracking_ki: float
+    tracking_integral_max_px: float
+    tracking_deadzone_px: int
+    tracking_min_step_mm: float
+    tracking_max_step_mm: float
+    tracking_target_lost_frames: int
 
 
 @dataclass
@@ -94,13 +105,23 @@ def _defaults_from_modules() -> tuple[NetworkData, MotionData, DriverData]:
         neutral_y=float(mcfg.NEUTRAL_Y),
         neutral_z=float(mcfg.NEUTRAL_Z),
         travel_speed=float(mcfg.TRAVEL_SPEED),
-        z_speed=float(mcfg.Z_SPEED),
-        send_rate_hz=float(mcfg.SEND_RATE_HZ),
-        feedrate_multiplier=float(mcfg.FEEDRATE_MULTIPLIER),
+        move_z_velocity=float(mcfg.MOVE_Z_VELOCITY),
         search_angular_velocity=float(mcfg.SEARCH_ANGULAR_VELOCITY),
         rotation_distance_mm=float(mcfg.ROTATION_DISTANCE_MM),
         degrees_per_revolution=float(mcfg.DEGREES_PER_REVOLUTION),
         max_angular_velocity=float(mcfg.MAX_ANGULAR_VELOCITY),
+        camera_width=int(mcfg.CAMERA_WIDTH),
+        camera_height=int(mcfg.CAMERA_HEIGHT),
+        search_step_mm=float(mcfg.SEARCH_STEP_MM),
+        detection_confidence_threshold=float(mcfg.DETECTION_CONFIDENCE_THRESHOLD),
+        vision_staleness_s=float(mcfg.VISION_STALENESS_S),
+        tracking_kp=float(mcfg.TRACKING_KP),
+        tracking_ki=float(mcfg.TRACKING_KI),
+        tracking_integral_max_px=float(mcfg.TRACKING_INTEGRAL_MAX_PX),
+        tracking_deadzone_px=int(mcfg.TRACKING_DEADZONE_PX),
+        tracking_min_step_mm=float(mcfg.TRACKING_MIN_STEP_MM),
+        tracking_max_step_mm=float(mcfg.TRACKING_MAX_STEP_MM),
+        tracking_target_lost_frames=int(mcfg.TRACKING_TARGET_LOST_FRAMES),
     )
     driver = DriverData(
         sg_result_min_ok=int(dcfg.SG_RESULT_MIN_OK),
@@ -203,12 +224,23 @@ class ConfigManager:
             return self.network
 
     def update_motion(self, **kwargs: Any) -> MotionData:
+        int_keys = frozenset(
+            {
+                "camera_width",
+                "camera_height",
+                "tracking_deadzone_px",
+                "tracking_target_lost_frames",
+            }
+        )
         with _lock:
             cur = asdict(self.motion)
             for k, v in kwargs.items():
                 if k not in cur or v is None:
                     continue
-                cur[k] = float(v)
+                if k in int_keys:
+                    cur[k] = int(v)
+                else:
+                    cur[k] = float(v)
             self.motion = MotionData(**cur)
             _sync_to_modules(self)
             self.save()
@@ -225,11 +257,25 @@ class ConfigManager:
                 "z": [m.z_min, m.z_max],
             },
             "neutral": {"x": m.neutral_x, "y": m.neutral_y, "z": m.neutral_z},
-            "speeds": {"travel": m.travel_speed, "z": m.z_speed},
-            "send_rate_hz": m.send_rate_hz,
-            "feedrate_multiplier": m.feedrate_multiplier,
-            "angular_velocity": m.search_angular_velocity,
+            "speeds": {"travel": m.travel_speed},
+            "move_z_velocity": m.move_z_velocity,
             "mm_per_degree": mm_per_degree,
+        }
+
+    def tracking_config_dict(self) -> dict[str, Any]:
+        """Dict for Domains.Behavior.TrackingController.apply_runtime_config."""
+        m = self.motion
+        return {
+            "frame_width": m.camera_width,
+            "frame_height": m.camera_height,
+            "deadzone_px": m.tracking_deadzone_px,
+            "kp": m.tracking_kp,
+            "ki": m.tracking_ki,
+            "integral_max_px": m.tracking_integral_max_px,
+            "min_step_mm": m.tracking_min_step_mm,
+            "max_step_mm": m.tracking_max_step_mm,
+            "confidence_threshold": m.detection_confidence_threshold,
+            "target_lost_frames": m.tracking_target_lost_frames,
         }
 
 
@@ -263,9 +309,7 @@ def _sync_to_modules(mgr: ConfigManager) -> None:
     mcfg.NEUTRAL_Y = mo.neutral_y
     mcfg.NEUTRAL_Z = mo.neutral_z
     mcfg.TRAVEL_SPEED = mo.travel_speed
-    mcfg.Z_SPEED = mo.z_speed
-    mcfg.SEND_RATE_HZ = mo.send_rate_hz
-    mcfg.FEEDRATE_MULTIPLIER = mo.feedrate_multiplier
+    mcfg.MOVE_Z_VELOCITY = mo.move_z_velocity
     mcfg.SEARCH_ANGULAR_VELOCITY = mo.search_angular_velocity
     mcfg.ROTATION_DISTANCE_MM = mo.rotation_distance_mm
     mcfg.DEGREES_PER_REVOLUTION = mo.degrees_per_revolution
@@ -275,6 +319,19 @@ def _sync_to_modules(mgr: ConfigManager) -> None:
     mcfg.SEARCH_MIN_ANGLE = mcfg.z_mm_to_angle(mcfg.Z_MIN)
     mcfg.SEARCH_MAX_ANGLE = mcfg.z_mm_to_angle(mcfg.Z_MAX)
     mcfg.SEARCH_START_ANGLE = mcfg.z_mm_to_angle(mcfg.SEARCH_START_Z)
+
+    mcfg.CAMERA_WIDTH = mo.camera_width
+    mcfg.CAMERA_HEIGHT = mo.camera_height
+    mcfg.SEARCH_STEP_MM = mo.search_step_mm
+    mcfg.DETECTION_CONFIDENCE_THRESHOLD = mo.detection_confidence_threshold
+    mcfg.VISION_STALENESS_S = mo.vision_staleness_s
+    mcfg.TRACKING_KP = mo.tracking_kp
+    mcfg.TRACKING_KI = mo.tracking_ki
+    mcfg.TRACKING_INTEGRAL_MAX_PX = mo.tracking_integral_max_px
+    mcfg.TRACKING_DEADZONE_PX = mo.tracking_deadzone_px
+    mcfg.TRACKING_MIN_STEP_MM = mo.tracking_min_step_mm
+    mcfg.TRACKING_MAX_STEP_MM = mo.tracking_max_step_mm
+    mcfg.TRACKING_TARGET_LOST_FRAMES = mo.tracking_target_lost_frames
 
     d = mgr.driver
     dcfg.SG_RESULT_MIN_OK = d.sg_result_min_ok
