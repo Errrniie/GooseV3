@@ -1,21 +1,19 @@
-"""Default production pipeline: search / track deterrence loop."""
+"""Default production pipeline: SEARCH / TRACK vision loop; ESP32 motors via USB CDC."""
 
-from Domains.Motion.Moonraker_Client import MoonrakerWSClient
-from Domains.Motion.Controller import MotionController
+import time
+
+from Config.Manager import get_config_manager, init_config
+import Config.Motion_Config as cfg
+import Config.Vision_Config as vcfg
+from Domains.Behavior.Search import SearchController, SearchConfig
+from Domains.Behavior.Tracking import TrackingController, TrackingConfig
+from Domains.Motion.Esp_Usb_Client import EspUsbClient
 from Domains.Motion.Runtime import (
-    set_active_motion_controller,
     set_active_search_controller,
     set_active_tracking_controller,
 )
-from Domains.Motion.Homing import home
-from Domains.Behavior.Search import SearchController, SearchConfig
-from Domains.Behavior.Tracking import TrackingController, TrackingConfig
-import Config.Motion_Config as cfg
-import Config.Network_Config as net_cfg
-from Domains.Vision.Interface import start_vision, stop_vision, get_latest_detection
-from Config.Manager import get_config_manager, init_config
+from Domains.Vision.Interface import get_latest_detection, start_vision, stop_vision
 
-# --- System states ---
 STATE_INIT = "INIT"
 STATE_SEARCH = "SEARCH"
 STATE_TRACK = "TRACK"
@@ -25,12 +23,15 @@ STATE_SHUTDOWN = "SHUTDOWN"
 def run() -> None:
     init_config()
     state = STATE_INIT
-    moonraker = MoonrakerWSClient(net_cfg.MOONRAKER_WS_URL)
-    # Shared with finally so we only close Moonraker if connect() succeeded.
-    ctx = {"moonraker_connected": False}
-    motion_cfg = get_config_manager().motion_controller_dict()
-    motion = MotionController(moonraker, motion_cfg)
-    set_active_motion_controller(motion)
+    mgr = get_config_manager()
+    nw = mgr.network
+
+    esp = EspUsbClient(nw.esp_cdc_port, nw.esp_cdc_baud)
+    try:
+        esp.open()
+        print(f"[MODE] ESP USB CDC open: {nw.esp_cdc_port} @ {nw.esp_cdc_baud}")
+    except Exception as e:
+        print(f"[MODE] ESP USB CDC open failed ({e}); vision messages will not reach ESP")
 
     search = SearchController(
         SearchConfig(
@@ -52,7 +53,7 @@ def run() -> None:
             integral_max_px=cfg.TRACKING_INTEGRAL_MAX_PX,
             min_step_mm=cfg.TRACKING_MIN_STEP_MM,
             max_step_mm=cfg.TRACKING_MAX_STEP_MM,
-            confidence_threshold=cfg.DETECTION_CONFIDENCE_THRESHOLD,
+            confidence_threshold=vcfg.VISION_BIRD_MIN_CONF,
             target_lost_frames=cfg.TRACKING_TARGET_LOST_FRAMES,
         )
     )
@@ -62,24 +63,26 @@ def run() -> None:
         while True:
             if state == STATE_INIT:
                 print("[STATE] INIT")
-                moonraker.connect()
-                ctx["moonraker_connected"] = True
-                home(moonraker)
                 start_vision()
-                motion.set_neutral_intent()
-                motion.move_blocking()
+                esp.send_vision(
+                    mode="INIT",
+                    frame_w=cfg.CAMERA_WIDTH,
+                    frame_h=cfg.CAMERA_HEIGHT,
+                )
                 print("Initialization complete. Transitioning to SEARCH state.")
                 state = STATE_SEARCH
                 continue
 
             if state == STATE_SEARCH:
                 detection = get_latest_detection()
-                if (
-                    detection.has_target
-                    and detection.confidence >= cfg.DETECTION_CONFIDENCE_THRESHOLD
-                ):
+                esp.send_vision(
+                    mode="SEARCH",
+                    frame_w=cfg.CAMERA_WIDTH,
+                    frame_h=cfg.CAMERA_HEIGHT,
+                )
+                if detection.active_track is not None:
                     print(
-                        f"[SEARCH] Target acquired! Center: {detection.bbox_center}, "
+                        f"[SEARCH] Bird acquired! Center: {detection.bbox_center}, "
                         f"Confidence: {detection.confidence:.2f}"
                     )
                     print("[STATE] SEARCH -> TRACK")
@@ -87,62 +90,62 @@ def run() -> None:
                     state = STATE_TRACK
                     continue
 
-                step = search.update()
-                z_delta = step["z_delta"]
-                motion.move_z_relative_blocking(z_delta)
+                time.sleep(0.002)
                 continue
 
             if state == STATE_TRACK:
                 detection = get_latest_detection()
-                track_result = tracker.update(
-                    detection.bbox_center, detection.confidence
-                )
+                if detection.active_track is not None:
+                    track_result = tracker.update(
+                        detection.bbox_center, detection.confidence
+                    )
+                else:
+                    track_result = tracker.update(None, 0.0)
 
                 if tracker.is_target_lost():
                     print("[TRACK] Target lost!")
                     print("[STATE] TRACK -> SEARCH")
-                    base_z = motion.logical_z_mm
-                    if base_z is None:
-                        base_z = cfg.NEUTRAL_Z
-                    z_snap = max(
-                        cfg.Z_MIN, min(cfg.Z_MAX, round(base_z))
-                    )
-                    delta = z_snap - base_z
-                    if abs(delta) > 1e-6:
-                        print(
-                            f"[TRACK→SEARCH] Snap Z: {base_z:.4f}mm → {z_snap:.0f}mm "
-                            f"(delta {delta:+.4f}mm)"
-                        )
-                        motion.move_z_relative_blocking(delta)
-                    search.sync_after_track(z_snap, cfg.SEARCH_STEP_MM)
+                    search.reset()
                     tracker.reset()
+                    esp.send_vision(
+                        mode="SEARCH",
+                        frame_w=cfg.CAMERA_WIDTH,
+                        frame_h=cfg.CAMERA_HEIGHT,
+                    )
                     state = STATE_SEARCH
                     continue
 
-                if track_result["should_move"]:
-                    z_delta = track_result["z_delta"]
+                err = track_result.get("error_px")
+                if track_result.get("should_move"):
                     print(
                         f"[TRACK] error={track_result['error_px']:.0f}px "
-                        f"I={track_result['integral_px']:.0f} -> "
-                        f"z_delta={z_delta:+.3f}mm"
+                        f"I={track_result['integral_px']:.0f} (CDC to ESP)"
                     )
-                    motion.move_z_relative_blocking(z_delta)
 
+                conf = (
+                    float(detection.confidence)
+                    if detection.active_track is not None
+                    else None
+                )
+                esp.send_vision(
+                    mode="TRACK",
+                    frame_w=cfg.CAMERA_WIDTH,
+                    frame_h=cfg.CAMERA_HEIGHT,
+                    error_px=float(err) if err is not None else None,
+                    confidence=conf,
+                    target_locked=bool(track_result.get("target_locked")),
+                )
+                time.sleep(0.002)
                 continue
 
             if state == STATE_SHUTDOWN:
                 print("[STATE] SHUTDOWN")
                 stop_vision()
-                motion.set_neutral_intent(z=0.0)
-                motion.move_blocking()
-                moonraker.close()
-                ctx["moonraker_connected"] = False
                 print("Shutdown complete.")
                 break
     finally:
         set_active_tracking_controller(None)
         set_active_search_controller(None)
-        set_active_motion_controller(None)
         try:
             stop_vision()
         except Exception:
@@ -153,8 +156,7 @@ def run() -> None:
             stop_all_streams()
         except Exception:
             pass
-        if ctx["moonraker_connected"]:
-            try:
-                moonraker.close()
-            except Exception:
-                pass
+        try:
+            esp.close()
+        except Exception:
+            pass

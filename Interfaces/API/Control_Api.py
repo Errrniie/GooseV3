@@ -15,18 +15,20 @@ Run this on the Jetson, then send HTTP requests from your laptop, e.g.:
 
   Modes / pairing:
     GET  http://<JETSON_IP>:8000/system/modes
-    POST http://<JETSON_IP>:8000/system/mode   (JSON {"mode": "normal"} or "test")
+    POST http://<JETSON_IP>:8000/system/mode   (JSON {"mode": "normal"|"test"|"yolo_test"})
     GET  http://<JETSON_IP>:8000/system/network
     POST http://<JETSON_IP>:8000/system/handshake  (JSON {"client_ip": "<laptop IPv4>"})
 
   Config:
     GET/POST http://<JETSON_IP>:8000/config/network
     GET/POST http://<JETSON_IP>:8000/config/motion
+    GET/POST http://<JETSON_IP>:8000/config/vision
 
   Vision (latest detection for laptop overlay):
     GET http://<JETSON_IP>:8000/vision/detection
 
-ESP32 IP comes from runtime config (``esp32_ip``); set via POST /config/network if needed.
+ESP32 laser IP (``esp32_ip``) and USB CDC (``esp_cdc_port``, ``esp_cdc_baud``) come from
+runtime config; set via POST /config/network if needed.
 """
 
 import ipaddress
@@ -40,7 +42,10 @@ from Networking.Local_IP import get_ethernet_ipv4
 
 from Config.Manager import get_config_manager, init_config
 from Domains.Laser.Esp_32 import LaserController
-from Domains.Motion.Runtime import notify_motion_config_changed
+from Domains.Motion.Runtime import (
+    notify_motion_config_changed,
+    notify_vision_config_changed,
+)
 
 init_config()
 
@@ -64,8 +69,8 @@ class MoveLaserRequest(BaseModel):
 
 
 class NetworkConfigUpdate(BaseModel):
-    moonraker_host: str | None = None
-    moonraker_port: int | None = None
+    esp_cdc_port: str | None = None
+    esp_cdc_baud: int | None = None
     esp32_ip: str | None = None
 
 
@@ -112,7 +117,6 @@ class MotionConfigUpdate(BaseModel):
     camera_width: int | None = None
     camera_height: int | None = None
     search_step_mm: float | None = None
-    detection_confidence_threshold: float | None = None
     vision_staleness_s: float | None = None
     tracking_kp: float | None = None
     tracking_ki: float | None = None
@@ -121,6 +125,15 @@ class MotionConfigUpdate(BaseModel):
     tracking_min_step_mm: float | None = None
     tracking_max_step_mm: float | None = None
     tracking_target_lost_frames: int | None = None
+
+
+class VisionConfigUpdate(BaseModel):
+    yolo_min_conf: float | None = None
+    human_min_conf: float | None = None
+    bird_min_conf: float | None = None
+    class_person_id: int | None = None
+    class_bird_id: int | None = None
+    max_detections: int | None = None
 
 
 # Simple in-memory state flags (per-process)
@@ -265,7 +278,7 @@ def laser_off():
 
 
 # ============================================================================
-# Config: NETWORK (Moonraker + ESP32)
+# Config: NETWORK (ESP CDC + ESP32 laser + streaming)
 # ============================================================================
 
 
@@ -276,9 +289,8 @@ def get_network_config():
     """
     n = get_config_manager().network
     return {
-        "moonraker_host": n.moonraker_host,
-        "moonraker_port": n.moonraker_port,
-        "moonraker_ws_path": n.moonraker_ws_path,
+        "esp_cdc_port": n.esp_cdc_port,
+        "esp_cdc_baud": n.esp_cdc_baud,
         "esp32_ip": n.esp32_ip,
         "laptop_ip": n.laptop_ip,
         "stream_port": n.stream_port,
@@ -293,10 +305,10 @@ def update_network_config(update: NetworkConfigUpdate):
     """
     mgr = get_config_manager()
     kwargs = {}
-    if update.moonraker_host is not None:
-        kwargs["moonraker_host"] = update.moonraker_host
-    if update.moonraker_port is not None:
-        kwargs["moonraker_port"] = update.moonraker_port
+    if update.esp_cdc_port is not None:
+        kwargs["esp_cdc_port"] = update.esp_cdc_port
+    if update.esp_cdc_baud is not None:
+        kwargs["esp_cdc_baud"] = update.esp_cdc_baud
     if update.esp32_ip is not None:
         kwargs["esp32_ip"] = update.esp32_ip
     changed = dict(kwargs)
@@ -306,9 +318,8 @@ def update_network_config(update: NetworkConfigUpdate):
     return {
         "updated": changed,
         "current": {
-            "moonraker_host": n.moonraker_host,
-            "moonraker_port": n.moonraker_port,
-            "moonraker_ws_path": n.moonraker_ws_path,
+            "esp_cdc_port": n.esp_cdc_port,
+            "esp_cdc_baud": n.esp_cdc_baud,
             "esp32_ip": n.esp32_ip,
             "laptop_ip": n.laptop_ip,
             "stream_port": n.stream_port,
@@ -344,11 +355,42 @@ def update_motion_config(update: MotionConfigUpdate):
     }
 
 
+# ============================================================================
+# Config: VISION (YOLO thresholds, class IDs)
+# ============================================================================
+
+
+@app.get("/config/vision")
+def get_vision_config():
+    """Full vision snapshot (persisted ``vision`` in runtime_config.json)."""
+    return asdict(get_config_manager().vision)
+
+
+@app.post("/config/vision")
+def update_vision_config(update: VisionConfigUpdate):
+    """
+    Update selected vision fields; persisted and synced to Config.Vision_Config.
+    Pushes bird_min_conf into TrackingController when registered.
+    """
+    raw = update.model_dump(exclude_unset=True, exclude_none=True)
+    changed = dict(raw)
+    if raw:
+        get_config_manager().update_vision(**raw)
+        notify_vision_config_changed()
+    return {
+        "updated": changed,
+        "current": get_vision_config(),
+    }
+
+
 @app.get("/vision/detection")
 def get_vision_detection():
     """
-    Latest detection for client-side bbox overlay (poll ~10–30 Hz).
-    ``bbox`` is ``[x1, y1, x2, y2]`` in pixels or null.
+    Latest detections for overlay (poll ~10–30 Hz).
+
+    ``detections``: persons with conf >= human_min, birds with conf >= yolo_min.
+    ``active_track``: highest-confidence bird >= bird_min, or null (control target).
+    Legacy ``has_target`` / ``bbox`` / ``confidence`` mirror ``active_track`` only.
     """
     from Domains.Vision.Interface import get_latest_detection
 
@@ -359,7 +401,28 @@ def get_vision_detection():
         if st.bbox is not None
         else None
     )
+
+    def _serialize_det(d: dict) -> dict:
+        x1, y1, x2, y2 = d["bbox"]
+        cx, cy = d["center"]
+        return {
+            "class_id": int(d["class_id"]),
+            "class_name": str(d["class_name"]),
+            "confidence": float(d["confidence"]),
+            "bbox": [int(x1), int(y1), int(x2), int(y2)],
+            "center": [int(cx), int(cy)],
+        }
+
+    detections = [_serialize_det(d) for d in st.detections]
+    active = (
+        _serialize_det(st.active_track)
+        if st.active_track is not None
+        else None
+    )
+
     return {
+        "detections": detections,
+        "active_track": active,
         "has_target": st.has_target,
         "bbox": bbox,
         "confidence": st.confidence,

@@ -244,7 +244,7 @@ class VideoTester:
                     break
                 
                 # Run detection on current frame (original resolution)
-                human, center, bbox, conf = detect_human(frame)
+                human, center, bbox, conf, _class_id = detect_human(frame)
                 feet_center = self._get_feet_center(bbox)
                 self.last_detection = (human, center, bbox, conf, feet_center)
                 
@@ -416,7 +416,7 @@ class DetectionCoverageAnalyzer:
                 self.current_frame_num = self.video.frame_number
                 
                 # Run YOLO detection
-                human, center, bbox, conf = detect_human(frame)
+                human, center, bbox, conf, _class_id = detect_human(frame)
                 
                 if human:
                     self.detected_frames += 1
@@ -524,7 +524,19 @@ def test_model_live():
 
     try:
         while True:
-            human, _, bbox, _, frame, feet_center = detect_human_live()
+            human, _, bbox, conf, _class_id = detect_human_live()
+            frame = None
+            try:
+                from Domains.Vision import Interface as _vif
+
+                if _vif.camera is not None:
+                    frame = _vif.camera.get_frame()
+            except Exception:
+                pass
+            feet_center = None
+            if bbox is not None:
+                x1, y1, x2, y2 = bbox
+                feet_center = (int((x1 + x2) / 2), y2)
 
             if frame is not None:
                 vis = frame.copy()

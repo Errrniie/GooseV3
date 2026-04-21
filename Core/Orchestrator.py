@@ -26,7 +26,7 @@ from Networking.Local_IP import get_ethernet_ipv4
 
 
 def _cleanup_video_streams() -> None:
-    """Stop vision (CameraThread GStreamer pipeline + threads) and any Test_Mode gst-launch UDP streams."""
+    """Stop vision (Argus/GStreamer + optional TCP JPEG thread + legacy hooks)."""
     try:
         from Domains.Vision.Interface import stop_vision
 
@@ -88,7 +88,7 @@ def run() -> None:
         )
     print(
         f"[ORCH] Control API on port {net_cfg.CONTROL_API_PORT} "
-        f"(POST /system/handshake, POST /system/mode {{\"mode\": \"normal\"|\"test\"}})"
+        f"(POST /system/handshake, POST /system/mode {{\"mode\": \"normal\"|\"test\"|\"yolo_test\"}})"
     )
 
     print("[ORCH] Waiting for mode selection…")

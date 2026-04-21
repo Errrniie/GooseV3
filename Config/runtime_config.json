@@ -1,8 +1,7 @@
 {
   "network": {
-    "moonraker_host": "192.168.8.127",
-    "moonraker_port": 7125,
-    "moonraker_ws_path": "/websocket",
+    "esp_cdc_port": "/dev/ttyACM0",
+    "esp_cdc_baud": 115200,
     "esp32_ip": "192.168.8.186",
     "laptop_ip": "192.168.8.154",
     "stream_port": 5000,
@@ -25,10 +24,9 @@
     "rotation_distance_mm": 8.0,
     "degrees_per_revolution": 360.0,
     "max_angular_velocity": 90.0,
-    "camera_width": 2028,
-    "camera_height": 1520,
+    "camera_width": 1920,
+    "camera_height": 1080,
     "search_step_mm": 1.0,
-    "detection_confidence_threshold": 0.6,
     "vision_staleness_s": 0.5,
     "tracking_kp": 0.003,
     "tracking_ki": 0.001,
@@ -46,5 +44,13 @@
     "stallguard_expected": 0,
     "ot_expected": 0,
     "otpw_expected": 0
+  },
+  "vision": {
+    "yolo_min_conf": 0.25,
+    "human_min_conf": 0.8,
+    "bird_min_conf": 0.35,
+    "class_person_id": 0,
+    "class_bird_id": 14,
+    "max_detections": 50
   }
 }

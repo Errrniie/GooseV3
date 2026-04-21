@@ -14,10 +14,11 @@ class SearchConfig:
 
 class SearchController:
     """
-    Step-based search pattern.
-    Outputs relative Z delta in mm for each step.
-    Waits for motion completion before returning next step.
-    Pattern: start_z → max_z → min_z → max_z (repeating)
+    Step-based search pattern (mm bookkeeping for Z bounds).
+
+    With Moonraker removed, ``Normal_Mode`` does not call ``update()`` for motion;
+    the ESP firmware owns the physical search sweep. This controller remains for
+    ``apply_runtime_z_bounds`` / ``reset`` when returning from TRACK → SEARCH.
     """
 
     def __init__(self, config: SearchConfig):

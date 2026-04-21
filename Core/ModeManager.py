@@ -12,12 +12,14 @@ from typing import Dict
 
 from Modes import Normal_Mode
 from Modes import Test_Mode
+from Modes import YoloTest_Mode
 
 Pipeline = Callable[[], None]
 
 _REGISTRY: Dict[str, Pipeline] = {
     "normal": Normal_Mode.run,
     "test": Test_Mode.run,
+    "yolo_test": YoloTest_Mode.run,
 }
 
 _lock = threading.Lock()

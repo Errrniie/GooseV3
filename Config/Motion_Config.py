@@ -50,15 +50,16 @@ SEARCH_START_Z = NEUTRAL_Z  # Start at neutral position (mm)
 SEARCH_STEP_MM = 1.0  # Z step size per search tick (mm)
 
 # -----------------------------------------------------------------------------
-# Camera / stream resolution (single source for capture, tracking math, UDP caps)
+# Camera / stream (Argus CSI via nvarguscamerasrc — V4L2 RG10 path not used for capture)
 # -----------------------------------------------------------------------------
+CAMERA_ARGUS_SENSOR_ID = 0
 CAMERA_WIDTH = 1920
 CAMERA_HEIGHT = 1080
+CAMERA_FPS = 60
 
 # -----------------------------------------------------------------------------
-# Vision + detection (YOLO + state machine use one threshold)
+# Vision timing (see Config.Vision_Config for YOLO thresholds)
 # -----------------------------------------------------------------------------
-DETECTION_CONFIDENCE_THRESHOLD = 0.6
 VISION_STALENESS_S = 0.5  # get_latest_detection treats older results as no target
 
 # -----------------------------------------------------------------------------

@@ -41,9 +41,8 @@ class TrackingController:
     
     Usage mirrors SearchController:
         tracker = TrackingController(config)
-        result = tracker.update(detection)
-        if result["should_move"]:
-            motion.move_z_relative_blocking(result["z_delta"])
+        result = tracker.update(bbox_center, confidence)
+        # Jetson sends ``error_px`` / mode to ESP over USB CDC; ``z_delta`` is optional legacy output.
     
     Does NOT:
     - Command motors directly

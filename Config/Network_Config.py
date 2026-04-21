@@ -6,24 +6,16 @@ should be defined here so they can be updated in one place.
 """
 
 # =============================================================================
-# Moonraker (Klipper API) connection
+# ESP32 — USB CDC (vision / motor hints to firmware; not the laser HTTP API)
 # =============================================================================
 
-# Printer / Moonraker host IP (update this when you move networks)
-MOONRAKER_HOST = "192.168.8.146"
-
-# Moonraker HTTP port (usually 7125)
-MOONRAKER_PORT = 7125
-
-# WebSocket path used by Moonraker
-MOONRAKER_WS_PATH = "/websocket"
-
-# Full WebSocket URL used by all MoonrakerWSClient instances
-MOONRAKER_WS_URL = f"ws://{MOONRAKER_HOST}:{MOONRAKER_PORT}{MOONRAKER_WS_PATH}"
+# Serial device when ESP enumerates as USB CDC (Jetson/Linux)
+ESP_CDC_PORT = "/dev/ttyACM0"
+ESP_CDC_BAUD = 115200
 
 
 # =============================================================================
-# ESP32 Laser Controller
+# ESP32 Laser Controller (HTTP — separate from CDC)
 # =============================================================================
 
 # ESP32 laser controller IP (update this when the ESP32 changes networks)

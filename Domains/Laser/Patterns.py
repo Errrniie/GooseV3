@@ -108,7 +108,7 @@ def start_square_pattern(ws, target_dist_in: float, square_size_ft: float,
     4. Sends SQUARE_START to begin the pattern
     
     Args:
-        ws: MoonrakerWSClient instance
+        ws: Client with ``send_gcode`` (legacy Klipper / host bridge; not used on ESP CDC path).
         target_dist_in: Forward distance to pattern center in inches
         square_size_ft: Size of the square pattern in feet
         speed: Motor speed for pattern moves (mm/min)
@@ -159,7 +159,7 @@ def stop_pattern(ws) -> None:
     Stop the currently running deterrence pattern immediately.
     
     Args:
-        ws: MoonrakerWSClient instance
+        ws: Client with ``send_gcode`` (legacy Klipper / host bridge).
     """
     ws.send_gcode("GRID_STOP")
     print("[Pattern] ✗ Pattern stopped")
@@ -174,7 +174,7 @@ def aim_and_pattern(ws, target_dist_in: float, square_size_ft: float = 0.5,
     Convenience function to start a deterrence pattern at a target.
     
     Args:
-        ws: MoonrakerWSClient instance
+        ws: Client with ``send_gcode`` (legacy Klipper / host bridge).
         target_dist_in: Distance to target in inches
         square_size_ft: Pattern size in feet (default 0.5 ft = 6 inches)
         speed: Motor speed (default 12000 mm/min)

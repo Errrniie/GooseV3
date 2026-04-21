@@ -2,8 +2,8 @@
 Runtime configuration manager: single source of truth in memory + JSON persistence.
 
 - On startup, merges defaults (from Config/*.py) with Config/runtime_config.json if present.
-- Updates sync into Config.Network_Config, Config.Motion_Config, Config.Driver_Thresholds
-  so existing `import Config.*` code sees current values.
+- Updates sync into Config.Network_Config, Config.Motion_Config, Config.Vision_Config,
+  Config.Driver_Thresholds so existing `import Config.*` code sees current values.
 - Thread-safe for API updates.
 """
 
@@ -26,9 +26,8 @@ _manager: Optional["ConfigManager"] = None
 
 @dataclass
 class NetworkData:
-    moonraker_host: str
-    moonraker_port: int
-    moonraker_ws_path: str
+    esp_cdc_port: str
+    esp_cdc_baud: int
     esp32_ip: str
     laptop_ip: Optional[str]
     stream_port: int
@@ -57,7 +56,6 @@ class MotionData:
     camera_width: int
     camera_height: int
     search_step_mm: float
-    detection_confidence_threshold: float
     vision_staleness_s: float
     tracking_kp: float
     tracking_ki: float
@@ -66,6 +64,16 @@ class MotionData:
     tracking_min_step_mm: float
     tracking_max_step_mm: float
     tracking_target_lost_frames: int
+
+
+@dataclass
+class VisionData:
+    yolo_min_conf: float
+    human_min_conf: float
+    bird_min_conf: float
+    class_person_id: int
+    class_bird_id: int
+    max_detections: int
 
 
 @dataclass
@@ -79,15 +87,15 @@ class DriverData:
     otpw_expected: int
 
 
-def _defaults_from_modules() -> tuple[NetworkData, MotionData, DriverData]:
+def _defaults_from_modules() -> tuple[NetworkData, MotionData, DriverData, VisionData]:
     import Config.Driver_Thresholds as dcfg
     import Config.Motion_Config as mcfg
     import Config.Network_Config as ncfg
+    import Config.Vision_Config as vcfg
 
     net = NetworkData(
-        moonraker_host=ncfg.MOONRAKER_HOST,
-        moonraker_port=int(ncfg.MOONRAKER_PORT),
-        moonraker_ws_path=ncfg.MOONRAKER_WS_PATH,
+        esp_cdc_port=str(ncfg.ESP_CDC_PORT),
+        esp_cdc_baud=int(ncfg.ESP_CDC_BAUD),
         esp32_ip=ncfg.ESP32_IP,
         laptop_ip=ncfg.LAPTOP_IP if ncfg.LAPTOP_IP else None,
         stream_port=int(ncfg.STREAM_PORT),
@@ -113,7 +121,6 @@ def _defaults_from_modules() -> tuple[NetworkData, MotionData, DriverData]:
         camera_width=int(mcfg.CAMERA_WIDTH),
         camera_height=int(mcfg.CAMERA_HEIGHT),
         search_step_mm=float(mcfg.SEARCH_STEP_MM),
-        detection_confidence_threshold=float(mcfg.DETECTION_CONFIDENCE_THRESHOLD),
         vision_staleness_s=float(mcfg.VISION_STALENESS_S),
         tracking_kp=float(mcfg.TRACKING_KP),
         tracking_ki=float(mcfg.TRACKING_KI),
@@ -132,7 +139,15 @@ def _defaults_from_modules() -> tuple[NetworkData, MotionData, DriverData]:
         ot_expected=int(dcfg.OT_EXPECTED),
         otpw_expected=int(dcfg.OTPW_EXPECTED),
     )
-    return net, motion, driver
+    vision = VisionData(
+        yolo_min_conf=float(vcfg.VISION_YOLO_MIN_CONF),
+        human_min_conf=float(vcfg.VISION_HUMAN_MIN_CONF),
+        bird_min_conf=float(vcfg.VISION_BIRD_MIN_CONF),
+        class_person_id=int(vcfg.VISION_CLASS_PERSON_ID),
+        class_bird_id=int(vcfg.VISION_CLASS_BIRD_ID),
+        max_detections=int(vcfg.VISION_MAX_DETECTIONS),
+    )
+    return net, motion, driver, vision
 
 
 T = TypeVar("T")
@@ -165,26 +180,29 @@ def _merge_section(
 
 
 class ConfigManager:
-    """Holds network, motion, and driver snapshots; persists to runtime_config.json."""
+    """Holds network, motion, driver, vision snapshots; persists to runtime_config.json."""
 
     def __init__(self) -> None:
         self.network: NetworkData
         self.motion: MotionData
         self.driver: DriverData
+        self.vision: VisionData
 
     def load(self) -> None:
         """Load defaults, overlay JSON if present, sync to Config modules, write JSON if missing."""
         with _lock:
-            net_d, mot_d, drv_d = _defaults_from_modules()
+            net_d, mot_d, drv_d, vis_d = _defaults_from_modules()
             if RUNTIME_JSON.is_file():
                 with open(RUNTIME_JSON, encoding="utf-8") as f:
                     raw = json.load(f)
                 net_d = _merge_section(net_d, raw.get("network"), NetworkData)
                 mot_d = _merge_section(mot_d, raw.get("motion"), MotionData)
                 drv_d = _merge_section(drv_d, raw.get("driver"), DriverData)
+                vis_d = _merge_section(vis_d, raw.get("vision"), VisionData)
             self.network = net_d
             self.motion = mot_d
             self.driver = drv_d
+            self.vision = vis_d
             _sync_to_modules(self)
             if not RUNTIME_JSON.is_file():
                 self.save()
@@ -196,6 +214,7 @@ class ConfigManager:
                 "network": asdict(self.network),
                 "motion": asdict(self.motion),
                 "driver": asdict(self.driver),
+                "vision": asdict(self.vision),
             }
         tmp = RUNTIME_JSON.with_suffix(".json.tmp")
         text = json.dumps(payload, indent=2)
@@ -214,7 +233,7 @@ class ConfigManager:
                     continue
                 if v is None:
                     continue
-                if k in ("moonraker_port", "stream_port", "control_api_port"):
+                if k in ("esp_cdc_baud", "stream_port", "control_api_port"):
                     cur[k] = int(v)
                 else:
                     cur[k] = v
@@ -246,25 +265,28 @@ class ConfigManager:
             self.save()
             return self.motion
 
-    def motion_controller_dict(self) -> dict[str, Any]:
-        """Dict for Domains.Motion.Controller — all keys the controller understands."""
-        m = self.motion
-        mm_per_degree = m.rotation_distance_mm / m.degrees_per_revolution
-        return {
-            "limits": {
-                "x": [m.x_min, m.x_max],
-                "y": [m.y_min, m.y_max],
-                "z": [m.z_min, m.z_max],
-            },
-            "neutral": {"x": m.neutral_x, "y": m.neutral_y, "z": m.neutral_z},
-            "speeds": {"travel": m.travel_speed},
-            "move_z_velocity": m.move_z_velocity,
-            "mm_per_degree": mm_per_degree,
-        }
+    def update_vision(self, **kwargs: Any) -> VisionData:
+        int_keys = frozenset(
+            {"class_person_id", "class_bird_id", "max_detections"}
+        )
+        with _lock:
+            cur = asdict(self.vision)
+            for k, v in kwargs.items():
+                if k not in cur or v is None:
+                    continue
+                if k in int_keys:
+                    cur[k] = int(v)
+                else:
+                    cur[k] = float(v)
+            self.vision = VisionData(**cur)
+            _sync_to_modules(self)
+            self.save()
+            return self.vision
 
     def tracking_config_dict(self) -> dict[str, Any]:
         """Dict for Domains.Behavior.TrackingController.apply_runtime_config."""
         m = self.motion
+        v = self.vision
         return {
             "frame_width": m.camera_width,
             "frame_height": m.camera_height,
@@ -274,7 +296,7 @@ class ConfigManager:
             "integral_max_px": m.tracking_integral_max_px,
             "min_step_mm": m.tracking_min_step_mm,
             "max_step_mm": m.tracking_max_step_mm,
-            "confidence_threshold": m.detection_confidence_threshold,
+            "confidence_threshold": v.bird_min_conf,
             "target_lost_frames": m.tracking_target_lost_frames,
         }
 
@@ -283,14 +305,11 @@ def _sync_to_modules(mgr: ConfigManager) -> None:
     import Config.Driver_Thresholds as dcfg
     import Config.Motion_Config as mcfg
     import Config.Network_Config as ncfg
+    import Config.Vision_Config as vcfg
 
     n = mgr.network
-    ncfg.MOONRAKER_HOST = n.moonraker_host
-    ncfg.MOONRAKER_PORT = n.moonraker_port
-    ncfg.MOONRAKER_WS_PATH = n.moonraker_ws_path
-    ncfg.MOONRAKER_WS_URL = (
-        f"ws://{n.moonraker_host}:{n.moonraker_port}{n.moonraker_ws_path}"
-    )
+    ncfg.ESP_CDC_PORT = n.esp_cdc_port
+    ncfg.ESP_CDC_BAUD = int(n.esp_cdc_baud)
     ncfg.ESP32_IP = n.esp32_ip
     ncfg.ESP32_BASE_URL = f"http://{n.esp32_ip}"
     ncfg.LAPTOP_IP = n.laptop_ip
@@ -323,7 +342,6 @@ def _sync_to_modules(mgr: ConfigManager) -> None:
     mcfg.CAMERA_WIDTH = mo.camera_width
     mcfg.CAMERA_HEIGHT = mo.camera_height
     mcfg.SEARCH_STEP_MM = mo.search_step_mm
-    mcfg.DETECTION_CONFIDENCE_THRESHOLD = mo.detection_confidence_threshold
     mcfg.VISION_STALENESS_S = mo.vision_staleness_s
     mcfg.TRACKING_KP = mo.tracking_kp
     mcfg.TRACKING_KI = mo.tracking_ki
@@ -332,6 +350,18 @@ def _sync_to_modules(mgr: ConfigManager) -> None:
     mcfg.TRACKING_MIN_STEP_MM = mo.tracking_min_step_mm
     mcfg.TRACKING_MAX_STEP_MM = mo.tracking_max_step_mm
     mcfg.TRACKING_TARGET_LOST_FRAMES = mo.tracking_target_lost_frames
+
+    vi = mgr.vision
+    vcfg.VISION_YOLO_MIN_CONF = vi.yolo_min_conf
+    vcfg.VISION_HUMAN_MIN_CONF = vi.human_min_conf
+    vcfg.VISION_BIRD_MIN_CONF = vi.bird_min_conf
+    vcfg.VISION_CLASS_PERSON_ID = vi.class_person_id
+    vcfg.VISION_CLASS_BIRD_ID = vi.class_bird_id
+    vcfg.VISION_MAX_DETECTIONS = vi.max_detections
+    vcfg.CLASS_ID_TO_NAME = {
+        vi.class_person_id: "person",
+        vi.class_bird_id: "bird",
+    }
 
     d = mgr.driver
     dcfg.SG_RESULT_MIN_OK = d.sg_result_min_ok
